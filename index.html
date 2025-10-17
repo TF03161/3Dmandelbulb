@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Mandelbulb Visualizer - Real-time Morphing | AID-FUJIHIRA</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --text: #e5e5e5;
+      --ui: #111111;
+      --line: #222222;
+      --accent: #00ffcc;
+      --danger: #ff4d4d;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      overflow: hidden;
+    }
+    #app {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+    header, footer {
+      background: var(--ui);
+      border-bottom: 1px solid var(--line);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+    footer {
+      border-top: 1px solid var(--line);
+      border-bottom: none;
+    }
+    header h1 {
+      font-size: 14px;
+      margin: 0;
+      color: var(--text);
+    }
+    .sep {
+      flex: 1;
+    }
+    .pill, .badge {
+      border: 1px solid var(--line);
+      padding: 2px 8px;
+      border-radius: 999px;
+      color: var(--text);
+    }
+    .badge.live {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    main {
+      position: relative;
+    }
+    canvas#gl {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: var(--bg);
+      touch-action: none;
+    }
+    #formula-display {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(17, 17, 17, 0.85);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      max-width: 400px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      transition: opacity 0.3s;
+    }
+    #formula-display h3 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    #formula-display .formula {
+      color: #fff;
+      margin: 4px 0;
+      font-size: 12px;
+    }
+    #formula-display .param {
+      color: var(--accent);
+    }
+    #formula-display .var {
+      color: #ff9;
+      font-style: italic;
+    }
+    #color-palette {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(17, 17, 17, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      backdrop-filter: blur(15px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      max-width: 320px;
+      max-height: 70vh;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--accent) var(--ui);
+    }
+    #color-palette::-webkit-scrollbar {
+      width: 6px;
+    }
+    #color-palette::-webkit-scrollbar-track {
+      background: var(--ui);
+      border-radius: 3px;
+    }
+    #color-palette::-webkit-scrollbar-thumb {
+      background: var(--accent);
+      border-radius: 3px;
+    }
+    #color-palette h3 {
+      margin: 0 0 16px 0;
+      font-size: 15px;
+      color: var(--accent);
+      font-weight: 600;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .palette-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .palette-category-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+      margin-top: 12px;
+    }
+    .palette-category-header:first-child {
+      margin-top: 0;
+    }
+    .category-icon {
+      font-size: 16px;
+    }
+    .category-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .palette-category-items {
+      display: grid;
+      gap: 8px;
+      padding: 8px 0;
+    }
+    .palette-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 2px solid transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .palette-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(0, 255, 204, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 255, 204, 0.2);
+    }
+    .palette-item.active {
+      border-color: var(--accent);
+      background: rgba(0, 255, 204, 0.12);
+      box-shadow: 0 4px 16px rgba(0, 255, 204, 0.3);
+    }
+    .palette-swatches {
+      display: flex;
+      gap: 4px;
+      width: 100%;
+    }
+    .palette-swatch {
+      flex: 1;
+      height: 32px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s;
+    }
+    .palette-item:hover .palette-swatch {
+      transform: translateY(-2px);
+    }
+    .palette-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .palette-name {
+      font-size: 12px;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .palette-theory {
+      font-size: 10px;
+      color: rgba(229, 229, 229, 0.6);
+      font-style: italic;
+      text-transform: capitalize;
+    }
+    .control-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 6px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .control-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--accent);
+    }
+    .control-btn.active {
+      background: rgba(0, 255, 204, 0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>🌸 3D Mandelbulb Visualizer</h1>
+      <div class="sep"></div>
+      <div class="badge live">LIVE</div>
+      <div class="pill">Miyabi Framework</div>
+    </header>
+    <main>
+      <canvas id="gl"></canvas>
+      <div id="color-palette">
+        <h3>🎨 Color Themes</h3>
+        <div class="palette-grid" id="palette-grid">
+          <!-- Color themes will be populated by JavaScript -->
+        </div>
+      </div>
+      <div id="formula-display">
+        <h3>📐 Mathematical Formula</h3>
+        <div class="formula" id="formula-content">
+          Loading...
+        </div>
+      </div>
+    </main>
+    <footer>
+      <button id="btnAutoColor" class="control-btn">Auto Color: Off</button>
+      <button id="btnAutoMorph" class="control-btn">Auto Morph: Off</button>
+      <div class="sep"></div>
+      <span>Controls: Mouse drag to rotate | Scroll to zoom</span>
+      <div class="sep"></div>
+      <span>Powered by WebGL2 & Claude Code</span>
+    </footer>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

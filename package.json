@@ -1,0 +1,35 @@
+{
+  "name": "3Dmandelbulb",
+  "version": "0.1.0",
+  "description": "Autonomous development powered by Agentic OS",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "agentic-os",
+    "autonomous"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/three": "^0.180.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "three": "^0.180.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.10",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "lil-gui": "^0.21.0"
+  }
+}
