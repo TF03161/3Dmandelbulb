@@ -81,6 +81,58 @@ Try these built-in presets from the GUI:
 - **Quantum Foam**: Lower power with box folding
 - **Alien Architecture**: High-power geometric structures
 
+## 🏗️ FoLD Export (Flower of Life Dome)
+
+Export architectural-scale 3D models to glTF/GLB format for use in CAD, BIM, or 3D software.
+
+### Quick Export
+
+```bash
+npx ts-node tools/export-fol-dome.ts --radius 15 --res 256 --out exports/fol-dome-R15m.glb
+```
+
+### Parameters
+
+- `--radius, -r <meters>` - Dome radius (default: 15.0m)
+- `--res <number>` - Grid resolution (default: 256, higher = more detail)
+- `--count <0..1>` - Number of bands (default: 0.5 ≈ 18 bands)
+- `--width <0..1>` - Band width (default: 0.20)
+- `--thickness <0..1>` - Band thickness (default: 0.12)
+- `--smooth <0..1>` - Smoothing factor (default: 0.08)
+- `--strength <0..1>` - Field strength (default: 0.30)
+- `--out, -o <path>` - Output file path
+
+### Example
+
+```bash
+# Export a 15m radius dome at high resolution
+npx ts-node tools/export-fol-dome.ts \
+  --radius 15 \
+  --res 320 \
+  --count 0.50 \
+  --width 0.20 \
+  --thickness 0.12 \
+  --smooth 0.08 \
+  --strength 0.30 \
+  --out exports/fol-dome-high-res.glb
+```
+
+### Viewing the GLB
+
+Use any glTF viewer:
+- [Khronos Sample Viewer](https://github.khronos.org/glTF-Sample-Viewer-Release/)
+- Blender (File → Import → glTF 2.0)
+- Three.js / Babylon.js loaders
+- Most 3D software (Unity, Unreal, etc.)
+
+### Technical Details
+
+- **Units**: Meters (glTF standard)
+- **Coordinate System**: Right-handed, +Y up, +Z forward
+- **Algorithm**: Marching Cubes on SDF (distance field)
+- **Output**: Triangle mesh with vertex normals
+- **Typical Size**: 2-20 MB depending on resolution
+
 ## Miyabi Framework
 
 This project uses **7 autonomous AI agents**:

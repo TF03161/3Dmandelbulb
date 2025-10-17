@@ -18,18 +18,22 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^20.10.0",
+    "@types/node": "^20.19.22",
     "@types/three": "^0.180.0",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "eslint": "^8.54.0",
     "three": "^0.180.0",
+    "ts-node": "^10.9.2",
     "tsx": "^4.7.0",
     "typescript": "^5.8.3",
     "vite": "^7.1.10",
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@gltf-transform/core": "^4.2.1",
+    "@gltf-transform/extensions": "^4.2.1",
+    "@gltf-transform/functions": "^4.2.1",
     "lil-gui": "^0.21.0"
   }
 }
