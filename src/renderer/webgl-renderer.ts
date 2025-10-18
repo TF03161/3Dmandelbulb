@@ -281,9 +281,9 @@ class WebGLRenderer {
 
     const gl = canvas.getContext('webgl2', {
       antialias: false,
-      desynchronized: true,
+      desynchronized: false,
       powerPreference: 'high-performance',
-      preserveDrawingBuffer: false
+      preserveDrawingBuffer: true
     });
 
     if (!gl) {
@@ -303,8 +303,14 @@ class WebGLRenderer {
       exposure: 1.0,
       saturation: 1.2,
       gamma: 2.2,
-      taaEnabled: true,
-      taaBlend: 0.9
+      taaEnabled: false, // Disabled by default to avoid flickering
+      taaBlend: 0.9,
+      hdrEnabled: true,
+      tonemapMode: 2, // ACES by default
+      dofEnabled: false,
+      dofFocusDistance: 4.0,
+      dofAperture: 0.3,
+      dofMaxBlur: 10.0
     };
 
     // Initialize camera position properly
@@ -575,17 +581,8 @@ class WebGLRenderer {
       this.canvas.height = rh;
       this.gl.viewport(0, 0, rw, rh);
 
-      // Temporarily disable post-processor for debugging
-      // TODO: Re-enable after fixing
-      /*
-      if (this.postProcessor) {
-        this.postProcessor.resize(rw, rh);
-      } else {
-        this.postProcessor = new PostProcessor(this.gl, rw, rh);
-        this.postProcessor.params = this.postProcessParams;
-      }
-      */
-      this.postProcessor = null; // Disabled for debugging
+      // Post-processor は使用していないため無効化
+      // パフォーマンスとちらつき防止のため、直接レンダリングのみ使用
     }
   }
 
@@ -593,15 +590,13 @@ class WebGLRenderer {
     const { gl, uniforms, params } = this;
     const time = (Date.now() - this.startTime) * 0.001;
 
-    // Begin rendering to scene framebuffer (with fallback)
-    if (this.postProcessor && this.postProcessor.beginScene) {
-      try {
-        this.postProcessor.beginScene();
-      } catch (e) {
-        console.error('Post-processor beginScene failed:', e);
-        this.postProcessor = null; // Disable post-processor on error
-      }
-    }
+    // DIRECT RENDERING (Post-Processor無効 - ちらつき防止のため)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+
+    // 背景色を黒に設定してクリア
+    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     // Auto Color - exactly same as original HTML
     // Uses Neon Rainbow mode (-1) with animated seed values
@@ -695,10 +690,10 @@ class WebGLRenderer {
         this.orbitDistance = 5;
         params.epsilon = 0.0008;
       } else if (params.mode === 5) {
-        // Gyroid Cathedral mode - much larger structure
-        this.orbitDistance = 12;
-        params.epsilon = 0.002;
-        params.gyroScale = 3.0;
+        // Gyroid Cathedral mode - adjusted for better visibility
+        this.orbitDistance = 6;
+        params.epsilon = 0.001;
+        params.gyroScale = 2.5;
       } else {
         // Mandelbulb mode - reset
         this.orbitDistance = 3.5;
@@ -811,20 +806,7 @@ class WebGLRenderer {
     // Draw fullscreen triangle
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    // Apply post-processing and composite to screen (with fallback)
-    if (this.postProcessor && this.postProcessor.endSceneAndCompose) {
-      try {
-        this.postProcessor.endSceneAndCompose();
-      } catch (e) {
-        console.error('Post-processor endSceneAndCompose failed:', e);
-        this.postProcessor = null; // Disable post-processor on error
-        // Render directly to screen without post-processing
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      }
-    } else {
-      // No post-processor, render directly to screen
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
+    // POST-PROCESSOR DISABLED - Direct rendering only
 
     requestAnimationFrame(this.render);
   };

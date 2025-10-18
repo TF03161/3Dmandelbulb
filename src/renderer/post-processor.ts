@@ -8,6 +8,8 @@ import postBlurSource from '../shaders/post-blur.glsl?raw';
 import postBrightnessSource from '../shaders/post-brightness.glsl?raw';
 import postComposeSource from '../shaders/post-compose.glsl?raw';
 import postTAASource from '../shaders/post-taa.glsl?raw';
+import postTonemapSource from '../shaders/post-tonemap.glsl?raw';
+import postDOFSource from '../shaders/post-dof.glsl?raw';
 
 export interface PostProcessParams {
   bloomStrength: number;
@@ -19,6 +21,12 @@ export interface PostProcessParams {
   gamma: number;
   taaEnabled: boolean;
   taaBlend: number;
+  hdrEnabled: boolean;
+  tonemapMode: number; // 0=None, 1=Reinhard, 2=ACES, 3=Uncharted2
+  dofEnabled: boolean;
+  dofFocusDistance: number;
+  dofAperture: number;
+  dofMaxBlur: number;
 }
 
 export class PostProcessor {
@@ -43,11 +51,17 @@ export class PostProcessor {
   private taaTexture: WebGLTexture | null = null;
   private taaHistoryTexture: WebGLTexture | null = null;
 
+  private dofFramebuffer: WebGLFramebuffer | null = null;
+  private dofTexture: WebGLTexture | null = null;
+  private depthTexture: WebGLTexture | null = null;
+
   // Programs
   private brightnessProgram: WebGLProgram | null = null;
   private blurProgram: WebGLProgram | null = null;
   private composeProgram: WebGLProgram | null = null;
   private taaProgram: WebGLProgram | null = null;
+  private tonemapProgram: WebGLProgram | null = null;
+  private dofProgram: WebGLProgram | null = null;
 
   // Quad VAO for fullscreen rendering
   private quadVAO: WebGLVertexArrayObject | null = null;
@@ -63,8 +77,14 @@ export class PostProcessor {
     exposure: 1.0,
     saturation: 1.2,
     gamma: 2.2,
-    taaEnabled: true,
-    taaBlend: 0.9
+    taaEnabled: false, // Disabled by default to avoid flickering
+    taaBlend: 0.9,
+    hdrEnabled: true,
+    tonemapMode: 2, // ACES by default
+    dofEnabled: false,
+    dofFocusDistance: 4.0,
+    dofAperture: 0.3,
+    dofMaxBlur: 10.0
   };
 
   constructor(gl: WebGL2RenderingContext, width: number, height: number) {
@@ -86,8 +106,10 @@ export class PostProcessor {
     this.blurProgram = this.createProgram(postVertexSource, postBlurSource);
     this.composeProgram = this.createProgram(postVertexSource, postComposeSource);
     this.taaProgram = this.createProgram(postVertexSource, postTAASource);
+    this.tonemapProgram = this.createProgram(postVertexSource, postTonemapSource);
+    this.dofProgram = this.createProgram(postVertexSource, postDOFSource);
 
-    if (!this.brightnessProgram || !this.blurProgram || !this.composeProgram || !this.taaProgram) {
+    if (!this.brightnessProgram || !this.blurProgram || !this.composeProgram || !this.taaProgram || !this.tonemapProgram || !this.dofProgram) {
       throw new Error('Failed to create post-processing programs');
     }
   }
@@ -160,7 +182,7 @@ export class PostProcessor {
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
   }
 
-  private createFramebuffer(width: number, height: number): { fbo: WebGLFramebuffer; texture: WebGLTexture } | null {
+  private createFramebuffer(width: number, height: number, useHDR: boolean = false): { fbo: WebGLFramebuffer; texture: WebGLTexture } | null {
     const { gl } = this;
 
     const fbo = gl.createFramebuffer();
@@ -169,8 +191,23 @@ export class PostProcessor {
     if (!fbo || !texture) return null;
 
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    // Use RGBA8 instead of RGBA16F for better compatibility
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    // Use HDR format (RGBA16F) if requested and supported
+    if (useHDR && this.params.hdrEnabled) {
+      // Check for float texture support
+      const ext = gl.getExtension('EXT_color_buffer_float');
+      if (ext) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.HALF_FLOAT, null);
+      } else {
+        // Fallback to RGBA8 if HDR not supported
+        console.warn('HDR (RGBA16F) not supported, falling back to RGBA8');
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      }
+    } else {
+      // Use standard LDR format
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    }
+
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -202,8 +239,8 @@ export class PostProcessor {
     // Clean up old framebuffers
     this.cleanup();
 
-    // Create scene framebuffer
-    const scene = this.createFramebuffer(width, height);
+    // Create scene framebuffer (HDR if enabled)
+    const scene = this.createFramebuffer(width, height, true);
     if (!scene) {
       console.error('Failed to create scene framebuffer');
       return;
@@ -252,6 +289,25 @@ export class PostProcessor {
       gl.bindTexture(gl.TEXTURE_2D, null);
     }
 
+    // Create DOF framebuffer
+    const dof = this.createFramebuffer(width, height);
+    if (dof) {
+      this.dofFramebuffer = dof.fbo;
+      this.dofTexture = dof.texture;
+    }
+
+    // Create depth texture (for DOF)
+    this.depthTexture = gl.createTexture();
+    if (this.depthTexture) {
+      gl.bindTexture(gl.TEXTURE_2D, this.depthTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+
     this.taaResetAccumulation = true;
   }
 
@@ -277,6 +333,9 @@ export class PostProcessor {
     deleteFramebuffer(this.taaFramebuffer);
     deleteTexture(this.taaTexture);
     deleteTexture(this.taaHistoryTexture);
+    deleteFramebuffer(this.dofFramebuffer);
+    deleteTexture(this.dofTexture);
+    deleteTexture(this.depthTexture);
   }
 
   public beginScene(): void {
@@ -302,17 +361,17 @@ export class PostProcessor {
     }
 
     gl.bindVertexArray(this.quadVAO);
+    let currentTexture = this.sceneTexture;
 
-    // 1. Extract bright areas (brightness threshold)
+    // 1. Extract bright areas (Bloom)
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.bloomFramebuffer);
     gl.viewport(0, 0, Math.floor(this.width / 2), Math.floor(this.height / 2));
     gl.useProgram(this.brightnessProgram);
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.sceneTexture);
+    gl.bindTexture(gl.TEXTURE_2D, currentTexture);
     gl.uniform1i(gl.getUniformLocation(this.brightnessProgram!, 'uTexture'), 0);
     gl.uniform1f(gl.getUniformLocation(this.brightnessProgram!, 'uThreshold'), this.params.bloomThreshold);
-
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     // 2. Horizontal blur
@@ -324,7 +383,6 @@ export class PostProcessor {
     gl.uniform1i(gl.getUniformLocation(this.blurProgram!, 'uTexture'), 0);
     gl.uniform2f(gl.getUniformLocation(this.blurProgram!, 'uDirection'), 1.0, 0.0);
     gl.uniform2f(gl.getUniformLocation(this.blurProgram!, 'uResolution'), Math.floor(this.width / 2), Math.floor(this.height / 2));
-
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     // 3. Vertical blur
@@ -336,19 +394,16 @@ export class PostProcessor {
     gl.uniform1i(gl.getUniformLocation(this.blurProgram!, 'uTexture'), 0);
     gl.uniform2f(gl.getUniformLocation(this.blurProgram!, 'uDirection'), 0.0, 1.0);
     gl.uniform2f(gl.getUniformLocation(this.blurProgram!, 'uResolution'), Math.floor(this.width / 2), Math.floor(this.height / 2));
-
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     // 4. TAA (if enabled)
-    let finalSceneTexture = this.sceneTexture;
-
-    if (this.params.taaEnabled) {
+    if (this.params.taaEnabled && this.taaFramebuffer && this.taaTexture && this.taaHistoryTexture) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.taaFramebuffer);
       gl.viewport(0, 0, this.width, this.height);
       gl.useProgram(this.taaProgram);
 
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, this.sceneTexture);
+      gl.bindTexture(gl.TEXTURE_2D, currentTexture);
       gl.uniform1i(gl.getUniformLocation(this.taaProgram!, 'uCurrent'), 0);
 
       gl.activeTexture(gl.TEXTURE1);
@@ -357,23 +412,41 @@ export class PostProcessor {
 
       gl.uniform1f(gl.getUniformLocation(this.taaProgram!, 'uBlend'), this.params.taaBlend);
       gl.uniform1i(gl.getUniformLocation(this.taaProgram!, 'uReset'), this.taaResetAccumulation ? 1 : 0);
-
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
       // Copy TAA result to history for next frame
-      this.copyTexture(this.taaTexture!, this.taaHistoryTexture!);
+      this.copyTexture(this.taaTexture, this.taaHistoryTexture);
 
-      finalSceneTexture = this.taaTexture;
+      currentTexture = this.taaTexture;
       this.taaResetAccumulation = false;
     }
 
-    // 5. Final composition (FXAA + Bloom + Chroma + Tonemap)
+    // 5. DOF (if enabled)
+    if (this.params.dofEnabled && this.dofFramebuffer && this.dofTexture) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.dofFramebuffer);
+      gl.viewport(0, 0, this.width, this.height);
+      gl.useProgram(this.dofProgram);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, currentTexture);
+      gl.uniform1i(gl.getUniformLocation(this.dofProgram!, 'uScene'), 0);
+
+      gl.uniform2f(gl.getUniformLocation(this.dofProgram!, 'uResolution'), this.width, this.height);
+      gl.uniform1f(gl.getUniformLocation(this.dofProgram!, 'uFocusDistance'), this.params.dofFocusDistance);
+      gl.uniform1f(gl.getUniformLocation(this.dofProgram!, 'uAperture'), this.params.dofAperture);
+      gl.uniform1f(gl.getUniformLocation(this.dofProgram!, 'uMaxBlur'), this.params.dofMaxBlur);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      currentTexture = this.dofTexture;
+    }
+
+    // 6. Final composition (with Tone Mapping and Bloom)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, this.width, this.height);
     gl.useProgram(this.composeProgram);
 
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, finalSceneTexture);
+    gl.bindTexture(gl.TEXTURE_2D, currentTexture);
     gl.uniform1i(gl.getUniformLocation(this.composeProgram!, 'uScene'), 0);
 
     gl.activeTexture(gl.TEXTURE1);
@@ -387,7 +460,8 @@ export class PostProcessor {
     gl.uniform1f(gl.getUniformLocation(this.composeProgram!, 'uExposure'), this.params.exposure);
     gl.uniform1f(gl.getUniformLocation(this.composeProgram!, 'uSaturation'), this.params.saturation);
     gl.uniform1f(gl.getUniformLocation(this.composeProgram!, 'uGamma'), this.params.gamma);
-
+    gl.uniform1i(gl.getUniformLocation(this.composeProgram!, 'uTonemapMode'), this.params.tonemapMode);
+    gl.uniform1i(gl.getUniformLocation(this.composeProgram!, 'uHDREnabled'), this.params.hdrEnabled ? 1 : 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.bindVertexArray(null);
@@ -437,6 +511,8 @@ export class PostProcessor {
     if (this.blurProgram) gl.deleteProgram(this.blurProgram);
     if (this.composeProgram) gl.deleteProgram(this.composeProgram);
     if (this.taaProgram) gl.deleteProgram(this.taaProgram);
+    if (this.tonemapProgram) gl.deleteProgram(this.tonemapProgram);
+    if (this.dofProgram) gl.deleteProgram(this.dofProgram);
     if (this.quadVAO) gl.deleteVertexArray(this.quadVAO);
   }
 }

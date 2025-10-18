@@ -96,10 +96,13 @@ function initControls(): void {
   }, 100);
 }
 
-// Setup HTML control buttons (Auto Color, Auto Morph)
+// Setup HTML control buttons (Auto Color, Auto Morph, Screenshot, Record Video, Export GLB)
 function setupControlButtons(renderer: RendererWithParams): void {
   const btnAutoColor = document.getElementById('btnAutoColor');
   const btnAutoMorph = document.getElementById('btnAutoMorph');
+  const btnScreenshot = document.getElementById('btnScreenshot');
+  const btnRecordVideo = document.getElementById('btnRecordVideo');
+  const btnExportGLB = document.getElementById('btnExportGLB');
 
   if (btnAutoColor) {
     btnAutoColor.addEventListener('click', () => {
@@ -131,6 +134,312 @@ function setupControlButtons(renderer: RendererWithParams): void {
         if (controller) {
           controller.setValue(r.autoMorphing);
         }
+      }
+    });
+  }
+
+  if (btnScreenshot) {
+    btnScreenshot.addEventListener('click', () => {
+      const canvas = document.getElementById('gl') as HTMLCanvasElement;
+      if (!canvas) {
+        alert('Canvas not found. Please try again.');
+        return;
+      }
+
+      // Get current mode for filename
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      const modeNames = [
+        'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+        'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+      ];
+      const modeName = r ? modeNames[r.params.mode] || 'Fractal' : 'Fractal';
+
+      // Convert canvas to blob
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          alert('Failed to capture screenshot. Please try again.');
+          return;
+        }
+
+        // Download the screenshot
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const filename = `${modeName}-screenshot-${timestamp}.png`;
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+
+        // Cleanup
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    });
+  }
+
+  // Video Recording button
+  if (btnRecordVideo) {
+    let recorder: any = null;
+    let isRecording = false;
+
+    btnRecordVideo.addEventListener('click', async () => {
+      if (!isRecording) {
+        // 録画開始
+        try {
+          const canvas = document.getElementById('gl') as HTMLCanvasElement;
+          if (!canvas) {
+            alert('Canvas not found. Please try again.');
+            return;
+          }
+
+          // 動的インポート
+          const { VideoRecorder, downloadVideoBlob } = await import('../export/video-recorder');
+
+          recorder = new VideoRecorder({
+            canvas,
+            fps: 60,
+            videoBitsPerSecond: 8000000, // 8 Mbps
+            onProgress: (seconds) => {
+              btnRecordVideo.textContent = `⏹️ Stop (${seconds.toFixed(1)}s)`;
+            }
+          });
+
+          await recorder.startRecording();
+          isRecording = true;
+          btnRecordVideo.textContent = '⏹️ Stop (0.0s)';
+          btnRecordVideo.style.background = 'rgba(255, 77, 77, 0.3)';
+          btnRecordVideo.style.borderColor = '#ff4d4d';
+
+        } catch (error) {
+          console.error('Failed to start recording:', error);
+          alert('Failed to start video recording: ' + (error instanceof Error ? error.message : 'Unknown error'));
+          isRecording = false;
+        }
+
+      } else {
+        // 録画停止
+        try {
+          btnRecordVideo.textContent = '⏳ Processing...';
+          btnRecordVideo.setAttribute('disabled', 'true');
+
+          const blob = await recorder.stopRecording();
+
+          // ファイル名を生成
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+          const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+          const modeNames = [
+            'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+            'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+          ];
+          const modeName = r ? modeNames[r.params.mode] || 'Fractal' : 'Fractal';
+
+          // 拡張子を決定（MIMEタイプから）
+          const extension = blob.type.includes('webm') ? 'webm' : 'mp4';
+          const filename = `${modeName}-video-${timestamp}.${extension}`;
+
+          // 動的インポート
+          const { downloadVideoBlob } = await import('../export/video-recorder');
+          downloadVideoBlob(blob, filename);
+
+          // ボタンをリセット
+          btnRecordVideo.textContent = '🎬 Record Video';
+          btnRecordVideo.style.background = 'rgba(255, 77, 77, 0.1)';
+          btnRecordVideo.style.borderColor = '#ff4d4d';
+          btnRecordVideo.removeAttribute('disabled');
+          isRecording = false;
+          recorder = null;
+
+        } catch (error) {
+          console.error('Failed to stop recording:', error);
+          alert('Failed to save video: ' + (error instanceof Error ? error.message : 'Unknown error'));
+          btnRecordVideo.textContent = '🎬 Record Video';
+          btnRecordVideo.removeAttribute('disabled');
+          isRecording = false;
+        }
+      }
+    });
+  }
+
+  if (btnExportGLB) {
+    btnExportGLB.addEventListener('click', async () => {
+      // Get current renderer params to detect which model is displayed
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) {
+        alert('Renderer not ready. Please wait a moment and try again.');
+        return;
+      }
+
+      // Get selected export resolution
+      const exportResolutionSelect = document.getElementById('exportResolution') as HTMLSelectElement;
+      const exportResolution = exportResolutionSelect ? parseInt(exportResolutionSelect.value, 10) : 192;
+
+      // Dynamic import to avoid bundling issues
+      const { exportModelInBrowser, downloadBlob } = await import('../export/browser-export');
+
+      const originalText = btnExportGLB.textContent;
+      btnExportGLB.textContent = '⏳ Exporting...';
+      btnExportGLB.setAttribute('disabled', 'true');
+
+      // Detect model name
+      const modeNames = [
+        'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+        'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+      ];
+      const modelName = modeNames[r.params.mode] || 'Model';
+
+      // Create progress overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        backdrop-filter: blur(10px);
+      `;
+
+      const progressBox = document.createElement('div');
+      progressBox.style.cssText = `
+        background: rgba(17, 17, 17, 0.95);
+        border: 2px solid var(--accent);
+        border-radius: 12px;
+        padding: 32px;
+        min-width: 400px;
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(0, 255, 204, 0.3);
+      `;
+
+      const title = document.createElement('h3');
+      title.textContent = `Exporting ${modelName} to GLB`;
+      title.style.cssText = `
+        margin: 0 0 20px 0;
+        color: var(--accent);
+        font-size: 18px;
+      `;
+
+      const progressText = document.createElement('div');
+      progressText.style.cssText = `
+        color: var(--text);
+        font-size: 14px;
+        margin-bottom: 16px;
+      `;
+      progressText.textContent = 'Initializing...';
+
+      const progressBar = document.createElement('div');
+      progressBar.style.cssText = `
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        overflow: hidden;
+      `;
+
+      const progressFill = document.createElement('div');
+      progressFill.style.cssText = `
+        width: 0%;
+        height: 100%;
+        background: var(--accent);
+        transition: width 0.3s;
+      `;
+
+      progressBar.appendChild(progressFill);
+      progressBox.appendChild(title);
+      progressBox.appendChild(progressText);
+      progressBox.appendChild(progressBar);
+      overlay.appendChild(progressBox);
+      document.body.appendChild(overlay);
+
+      try {
+        const blob = await exportModelInBrowser({
+          mode: r.params.mode,
+          resolution: exportResolution,
+          // Common params
+          maxIterations: r.params.maxIterations,
+          powerBase: r.params.powerBase,
+          powerAmp: r.params.powerAmp,
+          fold: r.params.fold,
+          boxSize: r.params.boxSize,
+          morphOn: r.params.morphOn,
+          // FoLD params
+          radius: 15.0,
+          count: 0.5,
+          width: 0.20,
+          thickness: 0.12,
+          smooth: 0.08,
+          strength: 0.30,
+          // Fibonacci params
+          fibSpiral: r.params.fibSpiral,
+          fibBend: r.params.fibBend,
+          fibWarp: r.params.fibWarp,
+          fibOffset: r.params.fibOffset,
+          fibLayer: r.params.fibLayer,
+          fibInward: r.params.fibInward,
+          fibBandGap: r.params.fibBandGap,
+          fibVortex: r.params.fibVortex,
+          // Mandelbox params
+          mbScale: r.params.mbScale,
+          mbMinRadius: r.params.mbMinRadius,
+          mbFixedRadius: r.params.mbFixedRadius,
+          mbIter: r.params.mbIter,
+          // Metatron params
+          metaRadius: r.params.metaRadius,
+          metaSpacing: r.params.metaSpacing,
+          metaNode: r.params.metaNode,
+          metaStrut: r.params.metaStrut,
+          metaLayer: r.params.metaLayer,
+          metaTwist: r.params.metaTwist,
+          // Gyroid params
+          gyroLevel: r.params.gyroLevel,
+          gyroScale: r.params.gyroScale,
+          gyroMod: r.params.gyroMod,
+          // Typhoon params
+          tyEye: r.params.tyEye,
+          tyPull: r.params.tyPull,
+          tyWall: r.params.tyWall,
+          tySpin: r.params.tySpin,
+          tyBand: r.params.tyBand,
+          tyNoise: r.params.tyNoise,
+          // Quaternion params
+          quatC: r.params.quatC,
+          quatPower: r.params.quatPower,
+          quatScale: r.params.quatScale,
+          // Cosmic params
+          cosRadius: r.params.cosRadius,
+          cosExpansion: r.params.cosExpansion,
+          cosRipple: r.params.cosRipple,
+          cosSpiral: r.params.cosSpiral,
+          onProgress: (current, total, message) => {
+            const percent = Math.round((current / total) * 100);
+            progressFill.style.width = `${percent}%`;
+            progressText.textContent = `${message} (${percent}%)`;
+          }
+        });
+
+        // Download the blob
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        downloadBlob(blob, `${modelName}-${timestamp}.glb`);
+
+        // Success message
+        progressText.textContent = '✅ Export complete! Download started.';
+        progressFill.style.width = '100%';
+
+        setTimeout(() => {
+          document.body.removeChild(overlay);
+        }, 2000);
+
+      } catch (error) {
+        console.error('Export failed:', error);
+        progressText.textContent = `❌ Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        progressText.style.color = 'var(--danger)';
+
+        setTimeout(() => {
+          document.body.removeChild(overlay);
+        }, 3000);
+      } finally {
+        btnExportGLB.textContent = originalText;
+        btnExportGLB.removeAttribute('disabled');
       }
     });
   }
@@ -438,205 +747,60 @@ interface ShapePreset {
 }
 
 const SHAPE_PRESETS: ShapePreset[] = [
+  // === MANDELBULB (Mode 0) - Classic fractals ===
   {
-    name: 'Classic',
+    name: 'Classic Bulb',
     apply: () => {
       const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
       if (!r) return;
       r.params.mode = 0;
       r.params.powerBase = 8;
       r.params.powerAmp = 0;
-      r.params.maxIterations = 8;
+      r.params.twist = 0;
+      r.params.fold = 1.0;
+      r.params.juliaMix = 0;
     }
   },
   {
-    name: 'Organic',
+    name: 'Twisted Dream',
     apply: () => {
       const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
       if (!r) return;
       r.params.mode = 0;
-      r.params.powerBase = 5;
-      r.params.powerAmp = 1.5;
-      r.params.twist = 0.3;
+      r.params.powerBase = 8;
+      r.params.powerAmp = 2.0;
+      r.params.twist = 3.14;
+      r.params.fold = 1.5;
     }
   },
   {
-    name: 'Crystal',
+    name: 'Crystal Spikes',
     apply: () => {
       const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
       if (!r) return;
       r.params.mode = 0;
       r.params.powerBase = 12;
       r.params.powerAmp = 0;
-      r.params.fold = 1.5;
+      r.params.fold = 1.8;
+      r.params.twist = 0;
     }
   },
   {
-    name: 'Electric',
+    name: 'Soft Organic',
     apply: () => {
       const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
       if (!r) return;
       r.params.mode = 0;
-      r.params.powerBase = 8;
-      r.params.powerAmp = 2.5;
-      r.params.twist = 1.57;
+      r.params.powerBase = 4;
+      r.params.powerAmp = 1.5;
+      r.params.twist = 0.5;
+      r.params.morphOn = 0.6;
     }
   },
+
+  // === FLOWER OF LIFE (Mode 1) - Sacred geometry ===
   {
-    name: 'Alien',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 0;
-      r.params.powerBase = 10;
-      r.params.twist = 0.8;
-      r.params.fold = 1.3;
-    }
-  },
-  {
-    name: 'Abstract',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 0;
-      r.params.powerBase = 6;
-      r.params.powerAmp = 2;
-      r.params.morphOn = 0.7;
-    }
-  },
-  {
-    name: 'Neon',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 2;
-      r.params.fibSpiral = 1.2;
-      r.params.fibVortex = 0.8;
-      r.params.colorMode = 5;
-    }
-  },
-  {
-    name: 'Deep Sea',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 1;
-      r.params.folComplexity = 0.7;
-      r.params.folSpiral = 0.5;
-      r.params.colorMode = 1;
-    }
-  },
-  {
-    name: 'Golden Bloom',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 1;
-      r.params.folComplexity = 0.9;
-      r.params.folHarmonic = 0.6;
-      r.params.colorMode = 26;
-    }
-  },
-  {
-    name: 'Fibonacci Storm',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 2;
-      r.params.fibInward = 1.5;
-      r.params.fibVortex = 1.2;
-      r.params.fibBandGap = 2.0;
-    }
-  },
-  {
-    name: 'Fibonacci Spiral',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 2;
-      r.params.fibSpiral = 1.5;
-      r.params.fibLayer = 0.8;
-      r.params.fibWarp = 0.5;
-    }
-  },
-  {
-    name: 'Fibonacci Vortex',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 2;
-      r.params.fibVortex = 1.8;
-      r.params.fibInward = 1.2;
-      r.params.fibOffset = 0.5;
-    }
-  },
-  {
-    name: 'Typhoon Eye',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 2;
-      r.params.fibVortex = 2.0;
-      r.params.fibSpiral = 0.8;
-      r.params.fibInward = 1.8;
-    }
-  },
-  {
-    name: 'Cyclone Spiral',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 2;
-      r.params.fibSpiral = 2.0;
-      r.params.fibBend = 1.0;
-      r.params.fibVortex = 1.5;
-    }
-  },
-  {
-    name: 'Typhoon Spiral',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 2;
-      r.params.fibSpiral = 1.8;
-      r.params.fibWarp = 1.2;
-      r.params.fibLayer = 1.0;
-    }
-  },
-  {
-    name: 'Typhoon Vortex',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 2;
-      r.params.fibVortex = 1.5;
-      r.params.fibInward = 1.0;
-      r.params.fibBandGap = 1.5;
-    }
-  },
-  {
-    name: 'Iris Helix',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 5;
-      r.params.gyroLevel = 0.3;
-      r.params.gyroScale = 1.5; // Smaller scale for better visibility
-      r.params.gyroMod = 0.5;
-    }
-  },
-  {
-    name: 'MBox Cathedral',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 3;
-      r.params.mbScale = -2.0;
-      r.params.mbIter = 12;
-    }
-  },
-  {
-    name: 'FoL Classic',
+    name: 'Sacred Flower',
     apply: () => {
       const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
       if (!r) return;
@@ -644,71 +808,244 @@ const SHAPE_PRESETS: ShapePreset[] = [
       r.params.folComplexity = 0;
       r.params.folSpacing = 1.0;
       r.params.folThickness = 0.08;
+      r.params.folTwist = 0;
+      r.params.folSpiral = 0;
     }
   },
   {
-    name: 'FoL Twist',
+    name: 'Spiral Petals',
     apply: () => {
       const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
       if (!r) return;
       r.params.mode = 1;
-      r.params.folTwist = 3.14;
-      r.params.folComplexity = 0.5;
+      r.params.folComplexity = 0.6;
+      r.params.folSpiral = 0.8;
+      r.params.folTwist = 1.57;
+      r.params.folHarmonic = 0.4;
     }
   },
   {
-    name: 'Box Bloom',
+    name: 'Hyperdimensional',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 1;
+      r.params.folComplexity = 1.0;
+      r.params.folHyper = 0.8;
+      r.params.folExtrude = 1.0;
+      r.params.folHarmonic = 0.7;
+    }
+  },
+
+  // === FIBONACCI SHELL (Mode 2) - Golden ratio spirals ===
+  {
+    name: 'Golden Shell',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 2;
+      r.params.fibSpiral = 0.5;
+      r.params.fibBend = 0;
+      r.params.fibWarp = 0.3;
+      r.params.fibInward = 0.4;
+      r.params.fibVortex = 0.3;
+    }
+  },
+  {
+    name: 'Nautilus Vortex',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 2;
+      r.params.fibSpiral = 1.2;
+      r.params.fibVortex = 1.5;
+      r.params.fibInward = 1.0;
+      r.params.fibBend = 0.6;
+    }
+  },
+  {
+    name: 'Fractal Storm',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 2;
+      r.params.fibVortex = 2.0;
+      r.params.fibInward = 1.8;
+      r.params.fibBandGap = 3.0;
+      r.params.fibWarp = 1.5;
+    }
+  },
+
+  // === MANDELBOX (Mode 3) - Box folding fractals ===
+  {
+    name: 'Box Cathedral',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 3;
+      r.params.mbScale = -2.0;
+      r.params.mbIter = 12;
+      r.params.mbMinRadius = 0.5;
+      r.params.mbFixedRadius = 1.0;
+    }
+  },
+  {
+    name: 'Cubic Labyrinth',
     apply: () => {
       const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
       if (!r) return;
       r.params.mode = 3;
       r.params.mbScale = -1.5;
       r.params.mbIter = 8;
-      r.params.mbFixedRadius = 1.2;
+      r.params.mbFixedRadius = 1.5;
+      r.params.mbMinRadius = 0.8;
     }
   },
   {
-    name: 'Cosmic Bloom',
+    name: 'Fractal Cube',
     apply: () => {
       const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
       if (!r) return;
-      r.params.mode = 0;
-      r.params.powerBase = 7;
-      r.params.powerAmp = 1.0;
-      r.params.fold = 1.2;
-      r.params.colorMode = 11;
+      r.params.mode = 3;
+      r.params.mbScale = -2.5;
+      r.params.mbIter = 15;
+      r.params.mbMinRadius = 0.3;
+      r.params.mbFixedRadius = 0.8;
     }
   },
+
+  // === METATRON CUBE (Mode 4) - 13 spheres sacred geometry ===
   {
-    name: 'Quaternion Bloom',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 0;
-      r.params.powerBase = 9;
-      r.params.juliaMix = 0.3;
-      r.params.morphOn = 0.5;
-    }
-  },
-  {
-    name: 'Quaternion Mirage',
-    apply: () => {
-      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-      if (!r) return;
-      r.params.mode = 0;
-      r.params.powerBase = 11;
-      r.params.juliaMix = 0.6;
-      r.params.twist = 0.5;
-    }
-  },
-  {
-    name: 'Metatron Symmetry',
+    name: 'Metatron Core',
     apply: () => {
       const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
       if (!r) return;
       r.params.mode = 4;
       r.params.metaLayer = 0.5;
       r.params.metaTwist = 0;
+      r.params.metaSpacing = 1.0;
+      r.params.metaNode = 0.5;
+    }
+  },
+  {
+    name: 'Rotating Matrix',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 4;
+      r.params.metaLayer = 0.8;
+      r.params.metaTwist = 3.14;
+      r.params.metaSpacing = 1.3;
+      r.params.metaStrut = 0.3;
+    }
+  },
+
+  // === GYROID CATHEDRAL (Mode 5) - Minimal surfaces ===
+  {
+    name: 'Gyroid Waves',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 5;
+      r.params.gyroLevel = 0.5;
+      r.params.gyroScale = 2.5;
+      r.params.gyroMod = 0.8;
+    }
+  },
+  {
+    name: 'Infinite Surface',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 5;
+      r.params.gyroLevel = 0;
+      r.params.gyroScale = 3.5;
+      r.params.gyroMod = 0.3;
+    }
+  },
+
+  // === TYPHOON (Mode 6) - Vortex structures ===
+  {
+    name: 'Calm Eye',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 6;
+      r.params.tyEye = 0.6;
+      r.params.tyPull = 0.8;
+      r.params.tySpin = 1.5;
+      r.params.tyWall = 1.0;
+      r.params.tyBand = 3.0;
+    }
+  },
+  {
+    name: 'Storm Fury',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 6;
+      r.params.tyEye = 0.2;
+      r.params.tyPull = 1.8;
+      r.params.tySpin = 3.5;
+      r.params.tyWall = 2.5;
+      r.params.tyBand = 6.0;
+      r.params.tyNoise = 0.6;
+    }
+  },
+
+  // === QUATERNION JULIA (Mode 7) - 4D fractals ===
+  {
+    name: '4D Sphere',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 7;
+      r.params.quatPower = 2.0;
+      r.params.quatScale = 1.0;
+      r.params.quatC[0] = -0.2;
+      r.params.quatC[1] = 0.6;
+      r.params.quatC[2] = 0.2;
+      r.params.quatC[3] = 0.0;
+    }
+  },
+  {
+    name: '4D Explosion',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 7;
+      r.params.quatPower = 6.0;
+      r.params.quatScale = 1.5;
+      r.params.quatC[0] = 0.3;
+      r.params.quatC[1] = -0.5;
+      r.params.quatC[2] = 0.4;
+      r.params.quatC[3] = 0.2;
+    }
+  },
+
+  // === COSMIC BLOOM (Mode 8) - Cosmic patterns ===
+  {
+    name: 'Starburst',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 8;
+      r.params.cosRadius = 2.0;
+      r.params.cosExpansion = 0.5;
+      r.params.cosRipple = 0.8;
+      r.params.cosSpiral = 0.4;
+    }
+  },
+  {
+    name: 'Galaxy Core',
+    apply: () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) return;
+      r.params.mode = 8;
+      r.params.cosRadius = 3.0;
+      r.params.cosExpansion = 1.2;
+      r.params.cosRipple = 1.5;
+      r.params.cosSpiral = 1.0;
     }
   }
 ];
@@ -880,6 +1217,88 @@ function setupGUI(renderer: RendererWithParams): void {
 
   // Add shape presets to GUI
   setupShapePresetsInGUI(gui, renderer);
+
+  // User Preset Management
+  const userPresetFolder = gui.addFolder('💾 User Presets');
+  const presetActions = {
+    'Save Current': () => {
+      const presetName = prompt('Enter preset name:');
+      if (!presetName) return;
+
+      try {
+        // Save all parameters to localStorage
+        const presetData = {
+          params: JSON.parse(JSON.stringify(renderer.params)),
+          seed: Array.from(renderer.params.seed),
+          quatC: Array.from(renderer.params.quatC)
+        };
+        localStorage.setItem(`preset_${presetName}`, JSON.stringify(presetData));
+        alert(`Preset "${presetName}" saved successfully!`);
+      } catch (error) {
+        alert('Failed to save preset. ' + (error instanceof Error ? error.message : ''));
+      }
+    },
+    'Load Preset': () => {
+      const presetName = prompt('Enter preset name to load:');
+      if (!presetName) return;
+
+      try {
+        const presetData = localStorage.getItem(`preset_${presetName}`);
+        if (!presetData) {
+          alert(`Preset "${presetName}" not found.`);
+          return;
+        }
+
+        const data = JSON.parse(presetData);
+        // Restore all parameters
+        Object.assign(renderer.params, data.params);
+        if (data.seed) {
+          data.seed.forEach((v: number, i: number) => renderer.params.seed[i] = v);
+        }
+        if (data.quatC) {
+          data.quatC.forEach((v: number, i: number) => renderer.params.quatC[i] = v);
+        }
+        alert(`Preset "${presetName}" loaded successfully!`);
+
+        // Update formula display
+        updateFormula(renderer.params.mode);
+      } catch (error) {
+        alert('Failed to load preset. ' + (error instanceof Error ? error.message : ''));
+      }
+    },
+    'List Presets': () => {
+      const presets: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('preset_')) {
+          presets.push(key.replace('preset_', ''));
+        }
+      }
+
+      if (presets.length === 0) {
+        alert('No saved presets found.');
+      } else {
+        alert('Saved presets:\n\n' + presets.join('\n'));
+      }
+    },
+    'Delete Preset': () => {
+      const presetName = prompt('Enter preset name to delete:');
+      if (!presetName) return;
+
+      const key = `preset_${presetName}`;
+      if (localStorage.getItem(key)) {
+        localStorage.removeItem(key);
+        alert(`Preset "${presetName}" deleted successfully!`);
+      } else {
+        alert(`Preset "${presetName}" not found.`);
+      }
+    }
+  };
+
+  userPresetFolder.add(presetActions, 'Save Current');
+  userPresetFolder.add(presetActions, 'Load Preset');
+  userPresetFolder.add(presetActions, 'List Presets');
+  userPresetFolder.add(presetActions, 'Delete Preset');
 
   // Initial formula display
   updateFormula(renderer.params.mode);
@@ -1104,24 +1523,60 @@ function setupGUI(renderer: RendererWithParams): void {
     if (params) params.vignette = v;
   });
 
-  // Tone mapping controls
-  const toneFolder = postFolder.addFolder('Tone Mapping');
-  toneFolder.add({ value: 1.0 }, 'value', 0.1, 3, 0.1).name('Exposure').onChange((v: number) => {
+  // HDR and Tone Mapping controls
+  const hdrToneFolder = postFolder.addFolder('HDR & Tone Mapping');
+  hdrToneFolder.add({ value: true }, 'value').name('HDR Enabled').onChange((v: boolean) => {
+    const params = getPostParams();
+    if (params) params.hdrEnabled = v;
+  });
+
+  const tonemapModes = {
+    'None': 0,
+    'Reinhard': 1,
+    'ACES': 2,
+    'Uncharted 2': 3
+  };
+  hdrToneFolder.add({ value: 2 }, 'value', tonemapModes).name('Tone Map Mode').onChange((v: number) => {
+    const params = getPostParams();
+    if (params) params.tonemapMode = v;
+  });
+
+  hdrToneFolder.add({ value: 1.0 }, 'value', 0.1, 3, 0.1).name('Exposure').onChange((v: number) => {
     const params = getPostParams();
     if (params) params.exposure = v;
   });
-  toneFolder.add({ value: 1.2 }, 'value', 0, 2, 0.1).name('Saturation').onChange((v: number) => {
+  hdrToneFolder.add({ value: 1.2 }, 'value', 0, 2, 0.1).name('Saturation').onChange((v: number) => {
     const params = getPostParams();
     if (params) params.saturation = v;
   });
-  toneFolder.add({ value: 2.2 }, 'value', 1, 3, 0.1).name('Gamma').onChange((v: number) => {
+  hdrToneFolder.add({ value: 2.2 }, 'value', 1, 3, 0.1).name('Gamma').onChange((v: number) => {
     const params = getPostParams();
     if (params) params.gamma = v;
+  });
+  hdrToneFolder.open();
+
+  // Depth of Field controls
+  const dofFolder = postFolder.addFolder('Depth of Field (DOF)');
+  dofFolder.add({ value: false }, 'value').name('DOF Enabled').onChange((v: boolean) => {
+    const params = getPostParams();
+    if (params) params.dofEnabled = v;
+  });
+  dofFolder.add({ value: 4.0 }, 'value', 0.5, 10, 0.1).name('Focus Distance').onChange((v: number) => {
+    const params = getPostParams();
+    if (params) params.dofFocusDistance = v;
+  });
+  dofFolder.add({ value: 0.3 }, 'value', 0, 1, 0.01).name('Aperture').onChange((v: number) => {
+    const params = getPostParams();
+    if (params) params.dofAperture = v;
+  });
+  dofFolder.add({ value: 10.0 }, 'value', 1, 50, 1).name('Max Blur').onChange((v: number) => {
+    const params = getPostParams();
+    if (params) params.dofMaxBlur = v;
   });
 
   postFolder.open();
 
-  console.log('🎨 UI Controls initialized with Post-Processing');
+  console.log('🎨 UI Controls initialized with Advanced Post-Processing (HDR, Tone Mapping, DOF)');
 }
 
 // Initialize when DOM is ready
