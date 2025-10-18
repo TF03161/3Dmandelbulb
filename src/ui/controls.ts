@@ -443,6 +443,181 @@ function setupControlButtons(renderer: RendererWithParams): void {
       }
     });
   }
+
+  // Architecture Export button
+  const btnExportArchitecture = document.getElementById('btnExportArchitecture') as HTMLButtonElement;
+  if (btnExportArchitecture) {
+    btnExportArchitecture.addEventListener('click', async () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) {
+        alert('Renderer not ready. Please wait a moment and try again.');
+        return;
+      }
+
+      // Get export resolution
+      const exportResolutionSelect = document.getElementById('exportResolution') as HTMLSelectElement;
+      const exportResolution = exportResolutionSelect ? parseInt(exportResolutionSelect.value, 10) : 128;
+
+      const originalText = btnExportArchitecture.textContent;
+      btnExportArchitecture.textContent = '⏳ Building...';
+      btnExportArchitecture.setAttribute('disabled', 'true');
+
+      // Detect model name
+      const modeNames = [
+        'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+        'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+      ];
+      const modelName = modeNames[r.params.mode] || 'Model';
+
+      // Create progress overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+
+      const progressBox = document.createElement('div');
+      progressBox.style.cssText = `
+        background: rgba(30, 30, 30, 0.95);
+        border: 2px solid var(--accent);
+        padding: 2rem;
+        border-radius: 8px;
+        min-width: 400px;
+      `;
+
+      const progressText = document.createElement('div');
+      progressText.textContent = '🏛️ Building architectural model...';
+      progressText.style.cssText = 'margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-primary);';
+
+      const progressBar = document.createElement('div');
+      progressBar.style.cssText = `
+        width: 100%;
+        height: 24px;
+        background: rgba(100, 100, 100, 0.3);
+        border-radius: 12px;
+        overflow: hidden;
+      `;
+
+      const progressFill = document.createElement('div');
+      progressFill.style.cssText = `
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--accent), #ffa500);
+        transition: width 0.3s ease;
+      `;
+
+      progressBar.appendChild(progressFill);
+      progressBox.appendChild(progressText);
+      progressBox.appendChild(progressBar);
+      overlay.appendChild(progressBox);
+      document.body.appendChild(overlay);
+
+      try {
+        // Dynamic import to avoid bundling issues
+        const { buildArchitecturalModel } = await import('../pipelines/build-architectural-model');
+        const { exportArchitecturalGLB, downloadArchitecturalGLB } = await import('../export/export-shell-and-frame');
+
+        // Get SDF function based on mode
+        let sdfFunc: (p: { x: number; y: number; z: number }) => number;
+        let bbox: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } };
+
+        if (r.params.mode === 0) {
+          // Mandelbulb
+          const { sdfMandelbulb } = await import('../export/sdf/mandelbulb');
+          sdfFunc = (p) => sdfMandelbulb(p, {
+            maxIterations: r.params.maxIterations || 15,
+            powerBase: r.params.powerBase || 8.0,
+            powerAmp: r.params.powerAmp || 0.0,
+            time: 0
+          });
+          bbox = {
+            min: { x: -2.5, y: -2.5, z: -2.5 },
+            max: { x: 2.5, y: 2.5, z: 2.5 }
+          };
+        } else if (r.params.mode === 3) {
+          // Mandelbox
+          const { sdfMandelbox } = await import('../export/sdf/mandelbox');
+          sdfFunc = (p) => sdfMandelbox(p, {
+            maxIterations: r.params.mbIter || 15,
+            scale: r.params.mbScale || 2.0,
+            minRadius: r.params.mbMinRadius || 0.5,
+            fixedRadius: r.params.mbFixedRadius || 1.0,
+            time: 0
+          });
+          bbox = {
+            min: { x: -3.0, y: -3.0, z: -3.0 },
+            max: { x: 3.0, y: 3.0, z: 3.0 }
+          };
+        } else if (r.params.mode === 5) {
+          // Gyroid
+          const { sdfGyroid } = await import('../export/sdf/gyroid');
+          sdfFunc = (p) => sdfGyroid(p, {
+            level: r.params.gyroLevel || 0.0,
+            scale: r.params.gyroScale || 1.0,
+            modulation: r.params.gyroMod || 0.0,
+            time: 0
+          });
+          bbox = {
+            min: { x: -5.0, y: -5.0, z: -5.0 },
+            max: { x: 5.0, y: 5.0, z: 5.0 }
+          };
+        } else {
+          alert('Architecture export currently supports Mandelbulb, Mandelbox, and Gyroid modes only.');
+          throw new Error('Unsupported mode for architecture export');
+        }
+
+        progressText.textContent = '🏛️ Extracting Shell...';
+        progressFill.style.width = '20%';
+
+        // Build architectural model
+        const archModel = buildArchitecturalModel(sdfFunc, bbox, {
+          resolution: exportResolution,
+          shellThreshold: 0.0,
+          floorHeight: 3.5,
+          coreRadius: 2.0,
+          panelAngleThreshold: 15
+        });
+
+        progressText.textContent = '📦 Generating GLB...';
+        progressFill.style.width = '80%';
+
+        // Export to GLB
+        const glb = exportArchitecturalGLB(archModel, modelName.toLowerCase());
+
+        progressText.textContent = '💾 Downloading...';
+        progressFill.style.width = '95%';
+
+        // Download
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        downloadArchitecturalGLB(glb, `${modelName}-Architecture-${timestamp}.glb`);
+
+        // Success
+        progressText.textContent = `✅ Export complete! Floors: ${archModel.metadata.totalFloors} | Panels: ${archModel.metadata.panelCount}`;
+        progressFill.style.width = '100%';
+
+        setTimeout(() => {
+          document.body.removeChild(overlay);
+        }, 3000);
+
+      } catch (error) {
+        console.error('Architecture export failed:', error);
+        progressText.textContent = `❌ Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        progressText.style.color = 'var(--danger)';
+
+        setTimeout(() => {
+          document.body.removeChild(overlay);
+        }, 3000);
+      } finally {
+        btnExportArchitecture.textContent = originalText;
+        btnExportArchitecture.removeAttribute('disabled');
+      }
+    });
+  }
 }
 
 function updateFormula(mode: number): void {
