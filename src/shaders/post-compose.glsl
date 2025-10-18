@@ -14,6 +14,8 @@ uniform float uVignette;       // Vignette intensity
 uniform float uExposure;       // Exposure
 uniform float uSaturation;     // Saturation
 uniform float uGamma;          // Gamma correction
+uniform int uTonemapMode;      // 0=None, 1=Reinhard, 2=ACES, 3=Uncharted2
+uniform bool uHDREnabled;      // HDR enabled or not
 
 // Luminance
 float luma(vec3 c) {
@@ -61,6 +63,11 @@ vec3 fxaa(sampler2D tex, vec2 uv, vec2 res) {
   return rgbB;
 }
 
+// Reinhard Tonemapping
+vec3 reinhardTonemap(vec3 color) {
+  return color / (1.0 + color);
+}
+
 // ACES Filmic Tonemapping
 vec3 acesTonemap(vec3 x) {
   const float a = 2.51;
@@ -69,6 +76,24 @@ vec3 acesTonemap(vec3 x) {
   const float d = 0.59;
   const float e = 0.14;
   return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+// Uncharted 2 Tonemapping
+vec3 uncharted2Tonemap(vec3 x) {
+  const float A = 0.15;
+  const float B = 0.50;
+  const float C = 0.10;
+  const float D = 0.20;
+  const float E = 0.02;
+  const float F = 0.30;
+  return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+}
+
+vec3 uncharted2(vec3 color) {
+  const float W = 11.2; // White point
+  vec3 curr = uncharted2Tonemap(color * 2.0);
+  vec3 whiteScale = 1.0 / uncharted2Tonemap(vec3(W));
+  return curr * whiteScale;
 }
 
 void main() {
@@ -97,8 +122,22 @@ void main() {
   // Exposure
   color *= uExposure;
 
-  // ACES Tonemapping
-  color = acesTonemap(color);
+  // Tonemapping (HDR to LDR)
+  if (uHDREnabled) {
+    if (uTonemapMode == 1) {
+      // Reinhard
+      color = reinhardTonemap(color);
+    } else if (uTonemapMode == 2) {
+      // ACES
+      color = acesTonemap(color);
+    } else if (uTonemapMode == 3) {
+      // Uncharted 2
+      color = uncharted2(color);
+    } else {
+      // No tonemapping, just clamp
+      color = clamp(color, 0.0, 1.0);
+    }
+  }
 
   // Saturation
   float gray = dot(color, vec3(0.299, 0.587, 0.114));

@@ -250,6 +250,30 @@
       border-color: var(--accent);
       color: var(--accent);
     }
+    .control-select {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      outline: none;
+    }
+    .control-select:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--accent);
+    }
+    .control-select:focus {
+      border-color: var(--accent);
+    }
+    .control-label {
+      font-size: 12px;
+      color: rgba(229, 229, 229, 0.8);
+      margin-right: 8px;
+    }
   </style>
 </head>
 <body>
@@ -278,6 +302,17 @@
     <footer>
       <button id="btnAutoColor" class="control-btn">Auto Color: Off</button>
       <button id="btnAutoMorph" class="control-btn">Auto Morph: Off</button>
+      <button id="btnScreenshot" class="control-btn">📸 Screenshot</button>
+      <button id="btnRecordVideo" class="control-btn" style="background: rgba(255, 77, 77, 0.1); border-color: #ff4d4d;">🎬 Record Video</button>
+      <span class="control-label">Export Resolution:</span>
+      <select id="exportResolution" class="control-select">
+        <option value="128">Low (128³)</option>
+        <option value="192" selected>Medium (192³)</option>
+        <option value="256">High (256³)</option>
+        <option value="320">Ultra (320³)</option>
+        <option value="512">Extreme (512³)</option>
+      </select>
+      <button id="btnExportGLB" class="control-btn" style="background: rgba(0, 255, 204, 0.1); border-color: var(--accent);">📦 Export GLB</button>
       <div class="sep"></div>
       <span>Controls: Mouse drag to rotate | Scroll to zoom</span>
       <div class="sep"></div>
