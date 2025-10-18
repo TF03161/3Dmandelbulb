@@ -49,6 +49,44 @@ export function exportArchitecturalGLB(
 }
 
 /**
+ * Export architectural model to GLTF JSON format (Three.js viewer compatible)
+ */
+export function exportArchitecturalGLTF(
+  model: ArchitecturalModel,
+  fractalSeed: string = 'mandelbulb'
+): { json: string; bin: ArrayBuffer } {
+  console.log('🏛️  Exporting architectural GLTF (JSON + BIN)...');
+
+  // Create metadata
+  const metadata: ArchitecturalGLBMetadata = {
+    architectural_type: 'sdf_derived_building',
+    fractal_seed: fractalSeed,
+    export_date: new Date().toISOString(),
+    units: 'meters',
+    floor_heights: model.metadata.floorHeights,
+    total_floors: model.metadata.totalFloors,
+    core_radius: model.metadata.coreRadius,
+    panel_count: model.metadata.panelCount
+  };
+
+  // Build glTF structure
+  const gltf = buildArchitecturalGLTF(model, metadata);
+
+  // Extract binary buffer
+  const binaryData = gltf.binaryBuffer as Uint8Array;
+  delete gltf.binaryBuffer;
+
+  // Update buffer reference to external .bin file
+  gltf.buffers[0].uri = 'architectural-model.bin';
+
+  // Return both JSON and binary data
+  return {
+    json: JSON.stringify(gltf, null, 2),
+    bin: binaryData.buffer
+  };
+}
+
+/**
  * Download GLB file to user's computer
  */
 export function downloadArchitecturalGLB(glb: ArrayBuffer, filename: string = 'architectural-model.glb'): void {
@@ -62,6 +100,38 @@ export function downloadArchitecturalGLB(glb: ArrayBuffer, filename: string = 'a
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   console.log(`✅ Downloaded: ${filename} (${(glb.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+}
+
+/**
+ * Download GLTF JSON + BIN files (Two separate files for Three.js viewer)
+ */
+export function downloadArchitecturalGLTFFiles(
+  gltf: { json: string; bin: ArrayBuffer },
+  baseFilename: string = 'architectural-model'
+): void {
+  // Download .gltf JSON file
+  const jsonBlob = new Blob([gltf.json], { type: 'application/json' });
+  const jsonUrl = URL.createObjectURL(jsonBlob);
+  const jsonLink = document.createElement('a');
+  jsonLink.href = jsonUrl;
+  jsonLink.download = `${baseFilename}.gltf`;
+  document.body.appendChild(jsonLink);
+  jsonLink.click();
+  document.body.removeChild(jsonLink);
+  URL.revokeObjectURL(jsonUrl);
+
+  // Download .bin binary file
+  const binBlob = new Blob([gltf.bin], { type: 'application/octet-stream' });
+  const binUrl = URL.createObjectURL(binBlob);
+  const binLink = document.createElement('a');
+  binLink.href = binUrl;
+  binLink.download = `${baseFilename}.bin`;
+  document.body.appendChild(binLink);
+  binLink.click();
+  document.body.removeChild(binLink);
+  URL.revokeObjectURL(binUrl);
+
+  console.log(`✅ Downloaded: ${baseFilename}.gltf + ${baseFilename}.bin (${(gltf.bin.byteLength / 1024 / 1024).toFixed(2)} MB)`);
 }
 
 /**
