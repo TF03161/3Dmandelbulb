@@ -583,11 +583,11 @@ function setupControlButtons(renderer: RendererWithParams): void {
           panelAngleThreshold: 15
         });
 
-        progressText.textContent = '📦 Generating GLTF...';
-        progressFill.style.width = '80%';
+        progressText.textContent = '📊 Evaluating model...';
+        progressFill.style.width = '70%';
 
-        // Export to GLTF (self-contained JSON with embedded base64)
-        const gltfJson = exportArchitecturalGLTF(archModel, modelName.toLowerCase());
+        // Export to GLTF with evaluation (self-contained JSON with embedded base64)
+        const gltfJson = exportArchitecturalGLTF(archModel, modelName.toLowerCase(), true);
 
         progressText.textContent = '💾 Downloading...';
         progressFill.style.width = '95%';

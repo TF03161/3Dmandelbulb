@@ -18,6 +18,24 @@ export interface ArchitecturalGLBMetadata {
   total_floors: number;
   core_radius: number;
   panel_count: number;
+  evaluation?: {
+    lighting: {
+      average_sky_view_factor: number;
+      panels_with_direct_sun: number;
+      average_irradiance: number;
+    };
+    view: {
+      average_view_factor: number;
+      average_view_distance: number;
+    };
+    structural: {
+      column_density: number;
+      max_span_length: number;
+      eccentricity: number;
+      structural_score: number;
+      warnings: string[];
+    };
+  };
 }
 
 /**
@@ -54,11 +72,12 @@ export function exportArchitecturalGLB(
  */
 export function exportArchitecturalGLTF(
   model: ArchitecturalModel,
-  fractalSeed: string = 'mandelbulb'
+  fractalSeed: string = 'mandelbulb',
+  includeEvaluation: boolean = false
 ): string {
   console.log('🏛️  Exporting architectural GLTF (embedded base64)...');
 
-  // Create metadata
+  // Create base metadata
   const metadata: ArchitecturalGLBMetadata = {
     architectural_type: 'sdf_derived_building',
     fractal_seed: fractalSeed,
@@ -69,6 +88,12 @@ export function exportArchitecturalGLTF(
     core_radius: model.metadata.coreRadius,
     panel_count: model.metadata.panelCount
   };
+
+  // Add evaluation if requested
+  if (includeEvaluation) {
+    const evaluation = evaluateArchitecturalModel(model);
+    metadata.evaluation = evaluation;
+  }
 
   // Build glTF structure
   const gltf = buildArchitecturalGLTF(model, metadata);
@@ -85,6 +110,40 @@ export function exportArchitecturalGLTF(
 
   // Return JSON string
   return JSON.stringify(gltf, null, 2);
+}
+
+/**
+ * Evaluate architectural model (lighting, view, structural)
+ */
+function evaluateArchitecturalModel(model: ArchitecturalModel): NonNullable<ArchitecturalGLBMetadata['evaluation']> {
+  // Dynamic imports to avoid circular dependencies
+  const { evaluateLighting } = require('../evaluation/lighting-approximation');
+  const { evaluateViewFactors } = require('../evaluation/view-factor');
+  const { evaluateStructuralHeuristics } = require('../evaluation/structural-heuristics');
+
+  // Run evaluations
+  const lightingResult = evaluateLighting(model.shell, model.panels);
+  const viewResult = evaluateViewFactors(model.floors, model.shell);
+  const structuralResult = evaluateStructuralHeuristics(model.frame, model.floors, model.core, model.shell);
+
+  return {
+    lighting: {
+      average_sky_view_factor: lightingResult.averageSkyViewFactor,
+      panels_with_direct_sun: lightingResult.panelsWithDirectSun,
+      average_irradiance: lightingResult.averageIrradiance
+    },
+    view: {
+      average_view_factor: viewResult.averageViewFactor,
+      average_view_distance: viewResult.averageViewDistance
+    },
+    structural: {
+      column_density: structuralResult.columnDensity,
+      max_span_length: structuralResult.maxSpanLength,
+      eccentricity: structuralResult.eccentricity,
+      structural_score: structuralResult.structuralScore,
+      warnings: structuralResult.warnings
+    }
+  };
 }
 
 /**
