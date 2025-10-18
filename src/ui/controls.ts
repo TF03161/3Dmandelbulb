@@ -520,7 +520,7 @@ function setupControlButtons(renderer: RendererWithParams): void {
       try {
         // Dynamic import to avoid bundling issues
         const { buildArchitecturalModel } = await import('../pipelines/build-architectural-model');
-        const { exportArchitecturalGLTF, downloadArchitecturalGLTFFiles } = await import('../export/export-shell-and-frame');
+        const { exportArchitecturalGLTF, downloadArchitecturalGLTF } = await import('../export/export-shell-and-frame');
 
         // Get SDF function based on mode
         let sdfFunc: (p: { x: number; y: number; z: number }) => number;
@@ -586,15 +586,15 @@ function setupControlButtons(renderer: RendererWithParams): void {
         progressText.textContent = '📦 Generating GLTF...';
         progressFill.style.width = '80%';
 
-        // Export to GLTF (JSON + BIN) - Three.js viewer compatible
-        const gltf = exportArchitecturalGLTF(archModel, modelName.toLowerCase());
+        // Export to GLTF (self-contained JSON with embedded base64)
+        const gltfJson = exportArchitecturalGLTF(archModel, modelName.toLowerCase());
 
         progressText.textContent = '💾 Downloading...';
         progressFill.style.width = '95%';
 
-        // Download both .gltf and .bin files
+        // Download single .gltf file (Three.js editor compatible)
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-        downloadArchitecturalGLTFFiles(gltf, `${modelName}-Architecture-${timestamp}`);
+        downloadArchitecturalGLTF(gltfJson, `${modelName}-Architecture-${timestamp}.gltf`);
 
         // Success
         progressText.textContent = `✅ Export complete! Floors: ${archModel.metadata.totalFloors} | Panels: ${archModel.metadata.panelCount}`;
