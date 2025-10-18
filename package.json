@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "lint": "eslint . --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gltf-to-ifc": "tsx tools/gltf-to-ifc.ts"
   },
   "keywords": [
     "agentic-os",
@@ -28,7 +29,8 @@
     "tsx": "^4.20.6",
     "typescript": "^5.8.3",
     "vite": "^7.1.10",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "web-ifc": "^0.0.72"
   },
   "dependencies": {
     "@gltf-transform/core": "^4.2.1",

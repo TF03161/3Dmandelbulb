@@ -38,6 +38,25 @@ npm run typecheck    # TypeScript type checking
 npm run lint         # Lint code
 ```
 
+### GLTF to IFC Conversion
+
+Convert exported GLTF files to IFC format for BIM software (Revit, ArchiCAD, Tekla):
+
+```bash
+# Basic usage
+npm run gltf-to-ifc -- input.gltf output.ifc
+
+# With options
+npm run gltf-to-ifc -- input.gltf output.ifc --project-name "My Building" --author "Your Name"
+```
+
+**Options:**
+- `--project-name <name>` - Project name (default: from GLTF metadata)
+- `--author <name>` - Author name (default: Claude)
+- `--organization <name>` - Organization name (default: 3Dmandelbulb)
+- `--latitude <lat>` - Latitude (default: 35.6762)
+- `--longitude <lon>` - Longitude (default: 139.6503)
+
 ## 📂 Project Structure
 
 ```
