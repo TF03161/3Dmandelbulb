@@ -2100,12 +2100,47 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
       import('../generators/parametric-tower').then(({ FloorShape, TaperingMode, TwistingMode, DEFAULT_TOWER_PARAMS }) => {
         const towerParams = { ...DEFAULT_TOWER_PARAMS };
 
+        // Real-time tower update function
+        const updateTowerRealtime = () => {
+          const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+          if (!renderer || renderer.params.mode !== 9) return;
+
+          // Update renderer tower parameters immediately
+          (renderer as any).towerParams = {
+            baseRadius: towerParams.baseRadius,
+            topRadius: towerParams.topRadius,
+            height: towerParams.height,
+            floorCount: towerParams.floorCount,
+            floorHeight: towerParams.floorHeight,
+            twistAngle: towerParams.twistAngle * Math.PI / 180,
+            shapeType: Object.values({
+              circle: 0, square: 1, triangle: 2, pentagon: 3,
+              hexagon: 4, octagon: 5, star: 6, cross: 7,
+              'l-shape': 8, 't-shape': 9, 'h-shape': 10
+            })[Object.keys({
+              circle: 0, square: 1, triangle: 2, pentagon: 3,
+              hexagon: 4, octagon: 5, star: 6, cross: 7,
+              'l-shape': 8, 't-shape': 9, 'h-shape': 10
+            }).indexOf(towerParams.floorShape)] || 0,
+            taperingType: Object.values({
+              none: 0, linear: 1, exponential: 2, 's-curve': 3, setback: 4
+            })[Object.keys({
+              none: 0, linear: 1, exponential: 2, 's-curve': 3, setback: 4
+            }).indexOf(towerParams.taperingMode)] || 1,
+            twistingType: Object.values({
+              none: 0, uniform: 1, accelerating: 2, sine: 3
+            })[Object.keys({
+              none: 0, uniform: 1, accelerating: 2, sine: 3
+            }).indexOf(towerParams.twistingMode)] || 0
+          };
+        };
+
         // Basic Dimensions
         const dimFolder = archFolder.addFolder('📏 Dimensions');
-        dimFolder.add(towerParams, 'baseRadius', 10, 50, 1).name('Base Radius (m)');
-        dimFolder.add(towerParams, 'height', 50, 500, 10).name('Height (m)');
-        dimFolder.add(towerParams, 'floorCount', 10, 100, 1).name('Floor Count');
-        dimFolder.add(towerParams, 'floorHeight', 2.5, 5.0, 0.1).name('Floor Height (m)');
+        dimFolder.add(towerParams, 'baseRadius', 10, 50, 1).name('Base Radius (m)').onChange(updateTowerRealtime);
+        dimFolder.add(towerParams, 'height', 50, 500, 10).name('Height (m)').onChange(updateTowerRealtime);
+        dimFolder.add(towerParams, 'floorCount', 10, 100, 1).name('Floor Count').onChange(updateTowerRealtime);
+        dimFolder.add(towerParams, 'floorHeight', 2.5, 5.0, 0.1).name('Floor Height (m)').onChange(updateTowerRealtime);
 
         // Floor Shape
         const shapeFolder = archFolder.addFolder('🔷 Floor Shape');
@@ -2124,11 +2159,10 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
         };
         shapeFolder.add({ value: towerParams.floorShape }, 'value', shapeOptions).name('Shape').onChange((v: string) => {
           towerParams.floorShape = v as any;
-          console.log('Floor shape changed:', v);
-          // TODO: Regenerate tower
+          updateTowerRealtime();
         });
-        shapeFolder.add(towerParams, 'shapeComplexity', 3, 32, 1).name('Complexity');
-        shapeFolder.add(towerParams, 'cornerRadius', 0, 1, 0.05).name('Corner Radius');
+        shapeFolder.add(towerParams, 'shapeComplexity', 3, 32, 1).name('Complexity').onChange(updateTowerRealtime);
+        shapeFolder.add(towerParams, 'cornerRadius', 0, 1, 0.05).name('Corner Radius').onChange(updateTowerRealtime);
 
         // Tapering
         const taperingFolder = archFolder.addFolder('📐 Tapering');
@@ -2141,10 +2175,10 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
         };
         taperingFolder.add({ value: towerParams.taperingMode }, 'value', taperingOptions).name('Mode').onChange((v: string) => {
           towerParams.taperingMode = v as any;
-          console.log('Tapering mode changed:', v);
+          updateTowerRealtime();
         });
-        taperingFolder.add(towerParams, 'taperingAmount', 0, 1, 0.05).name('Amount');
-        taperingFolder.add(towerParams, 'topRadius', 5, 50, 1).name('Top Radius (m)');
+        taperingFolder.add(towerParams, 'taperingAmount', 0, 1, 0.05).name('Amount').onChange(updateTowerRealtime);
+        taperingFolder.add(towerParams, 'topRadius', 5, 50, 1).name('Top Radius (m)').onChange(updateTowerRealtime);
 
         // Twisting
         const twistingFolder = archFolder.addFolder('🌀 Twisting');
@@ -2156,22 +2190,106 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
         };
         twistingFolder.add({ value: towerParams.twistingMode }, 'value', twistingOptions).name('Mode').onChange((v: string) => {
           towerParams.twistingMode = v as any;
-          console.log('Twisting mode changed:', v);
+          updateTowerRealtime();
         });
-        twistingFolder.add(towerParams, 'twistAngle', 0, 720, 10).name('Twist Angle (°)');
-        twistingFolder.add(towerParams, 'twistLevels', 5, 50, 1).name('Levels');
+        twistingFolder.add(towerParams, 'twistAngle', 0, 720, 10).name('Twist Angle (°)').onChange(updateTowerRealtime);
+        twistingFolder.add(towerParams, 'twistLevels', 5, 50, 1).name('Levels').onChange(updateTowerRealtime);
 
         // Variations
         const varFolder = archFolder.addFolder('🎲 Variations');
-        varFolder.add(towerParams, 'floorVariation', 0, 0.5, 0.05).name('Floor Variation');
-        varFolder.add(towerParams, 'asymmetry', 0, 1, 0.05).name('Asymmetry');
+        varFolder.add(towerParams, 'floorVariation', 0, 0.5, 0.05).name('Floor Variation').onChange(updateTowerRealtime);
+        varFolder.add(towerParams, 'asymmetry', 0, 1, 0.05).name('Asymmetry').onChange(updateTowerRealtime);
 
         // Facade
         const facadeFolder = archFolder.addFolder('🏢 Facade');
-        facadeFolder.add(towerParams, 'facadeGridX', 1, 10, 0.5).name('Grid X (m)');
-        facadeFolder.add(towerParams, 'facadeGridZ', 1, 10, 0.5).name('Grid Z (m)');
-        facadeFolder.add(towerParams, 'panelDepth', 0, 0.5, 0.05).name('Panel Depth (m)');
-        facadeFolder.add(towerParams, 'balconyRatio', 0, 0.3, 0.05).name('Balcony Ratio');
+        facadeFolder.add(towerParams, 'facadeGridX', 1, 10, 0.5).name('Grid X (m)').onChange(updateTowerRealtime);
+        facadeFolder.add(towerParams, 'facadeGridZ', 1, 10, 0.5).name('Grid Z (m)').onChange(updateTowerRealtime);
+        facadeFolder.add(towerParams, 'panelDepth', 0, 0.5, 0.05).name('Panel Depth (m)').onChange(updateTowerRealtime);
+        facadeFolder.add(towerParams, 'balconyRatio', 0, 0.3, 0.05).name('Balcony Ratio').onChange(updateTowerRealtime);
+
+        // Building Type Presets
+        const presetsFolder = archFolder.addFolder('🏛️ Building Presets');
+        const presets = {
+          'Residential Tower': () => {
+            towerParams.baseRadius = 15;
+            towerParams.topRadius = 15;
+            towerParams.height = 200;
+            towerParams.floorCount = 60;
+            towerParams.floorHeight = 3.0;
+            towerParams.floorShape = FloorShape.SQUARE;
+            towerParams.taperingMode = TaperingMode.NONE;
+            towerParams.twistingMode = TwistingMode.NONE;
+            towerParams.twistAngle = 0;
+            updateTowerRealtime();
+            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
+              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
+            });
+          },
+          'Office Tower': () => {
+            towerParams.baseRadius = 25;
+            towerParams.topRadius = 20;
+            towerParams.height = 250;
+            towerParams.floorCount = 60;
+            towerParams.floorHeight = 4.0;
+            towerParams.floorShape = FloorShape.OCTAGON;
+            towerParams.taperingMode = TaperingMode.LINEAR;
+            towerParams.twistingMode = TwistingMode.UNIFORM;
+            towerParams.twistAngle = 45;
+            updateTowerRealtime();
+            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
+              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
+            });
+          },
+          'Mixed-Use Tower': () => {
+            towerParams.baseRadius = 30;
+            towerParams.topRadius = 18;
+            towerParams.height = 300;
+            towerParams.floorCount = 75;
+            towerParams.floorHeight = 4.0;
+            towerParams.floorShape = FloorShape.HEXAGON;
+            towerParams.taperingMode = TaperingMode.S_CURVE;
+            towerParams.twistingMode = TwistingMode.SINE;
+            towerParams.twistAngle = 90;
+            updateTowerRealtime();
+            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
+              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
+            });
+          },
+          'Iconic Landmark': () => {
+            towerParams.baseRadius = 35;
+            towerParams.topRadius = 8;
+            towerParams.height = 400;
+            towerParams.floorCount = 100;
+            towerParams.floorHeight = 4.0;
+            towerParams.floorShape = FloorShape.STAR;
+            towerParams.taperingMode = TaperingMode.EXPONENTIAL;
+            towerParams.twistingMode = TwistingMode.ACCELERATING;
+            towerParams.twistAngle = 180;
+            updateTowerRealtime();
+            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
+              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
+            });
+          },
+          'Modern Skyscraper': () => {
+            towerParams.baseRadius = 28;
+            towerParams.topRadius = 22;
+            towerParams.height = 350;
+            towerParams.floorCount = 85;
+            towerParams.floorHeight = 4.0;
+            towerParams.floorShape = FloorShape.CROSS;
+            towerParams.taperingMode = TaperingMode.SETBACK;
+            towerParams.twistingMode = TwistingMode.UNIFORM;
+            towerParams.twistAngle = 30;
+            updateTowerRealtime();
+            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
+              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
+            });
+          }
+        };
+
+        Object.entries(presets).forEach(([name, fn]) => {
+          presetsFolder.add({ preset: fn }, 'preset').name(name);
+        });
 
         // Generate button
         const generateBtn = {
