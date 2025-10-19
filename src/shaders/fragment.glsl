@@ -1018,8 +1018,22 @@ float parametricTowerDE(vec3 p, out vec4 trap) {
   }
 
   // Add floor detail (horizontal bands)
-  float floorBands = sin(y / max(uTowerFloorHeight, 1e-3) * TAU) * 0.1;
+  float floorBands = sin(y / max(uTowerFloorHeight, 1e-3) * TAU) * 0.08;
   shapeDist -= floorBands;
+
+  // Add window pattern (vertical stripes)
+  float windowPattern = sin(angle * (8.0 + float(uTowerShapeType) * 2.0)) * 0.03;
+  shapeDist -= windowPattern;
+
+  // Add horizontal divisions every 5 floors
+  float floorDivisions = smoothstep(0.95, 1.0, fract(y / (max(uTowerFloorHeight, 1e-3) * 5.0))) * 0.15;
+  shapeDist += floorDivisions;
+
+  // Add corner chamfering for non-circular shapes
+  if (uTowerShapeType > 0) {
+    float cornerDetail = smoothstep(0.9, 1.0, dist2D / max(radius, 1e-3)) * 0.05;
+    shapeDist += cornerDetail;
+  }
 
   trap = vec4(abs(p), shapeDist + 1.0);
 

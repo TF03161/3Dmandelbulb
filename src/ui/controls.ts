@@ -681,6 +681,20 @@ function updateFormula(mode: number): void {
       <div style="margin-top:8px;">Triply periodic surface</div>
       <div>Zero mean curvature everywhere</div>
     `;
+  } else if (mode === 9) {
+    // Parametric Tower formula
+    const renderer = (window as any).renderer;
+    const towerParams = (renderer as any)?.towerParams || {};
+
+    formulaContent.innerHTML = `
+      <div>🏗️ Parametric Tower Architecture</div>
+      <div style="margin-top:8px;">Height: <span class="param">${towerParams.height?.toFixed(0) || 150}m</span>, Floors: <span class="param">${towerParams.floorCount?.toFixed(0) || 50}</span></div>
+      <div style="margin-top:4px;">Radius Interpolation:</div>
+      <div><span class="var">r</span>(<span class="var">t</span>) = <span class="param">R<sub>base</sub></span> + (<span class="param">R<sub>top</sub></span> - <span class="param">R<sub>base</sub></span>) · <span class="var">f</span>(<span class="var">t</span>)</div>
+      <div style="margin-top:4px;">Twist Function:</div>
+      <div><span class="var">θ</span>(<span class="var">t</span>) = <span class="param">θ<sub>max</sub></span> · <span class="var">g</span>(<span class="var">t</span>)</div>
+      <div style="margin-top:4px;">where <span class="var">t</span> = <span class="var">y</span> / <span class="param">h</span> ∈ [0, 1]</div>
+    `;
   }
 }
 
@@ -2133,6 +2147,9 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
               none: 0, uniform: 1, accelerating: 2, sine: 3
             }).indexOf(towerParams.twistingMode)] || 0
           };
+
+          // Update formula display with current parameters
+          updateFormula(9);
         };
 
         // Basic Dimensions
@@ -2207,6 +2224,21 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
         facadeFolder.add(towerParams, 'panelDepth', 0, 0.5, 0.05).name('Panel Depth (m)').onChange(updateTowerRealtime);
         facadeFolder.add(towerParams, 'balconyRatio', 0, 0.3, 0.05).name('Balcony Ratio').onChange(updateTowerRealtime);
 
+        // Helper function to update UI and camera
+        const applyPresetWithCamera = (height: number) => {
+          updateTowerRealtime();
+          [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
+            folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
+          });
+          const renderer = (window as any).renderer;
+          if (renderer) {
+            renderer.orbitDistance = height * 0.8;
+            renderer.orbitPitch = 0.3;
+            renderer.orbitYaw = 0.5;
+            renderer.updateOrbitCamera();
+          }
+        };
+
         // Building Type Presets
         const presetsFolder = archFolder.addFolder('🏛️ Building Presets');
         const presets = {
@@ -2220,10 +2252,7 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
             towerParams.taperingMode = TaperingMode.NONE;
             towerParams.twistingMode = TwistingMode.NONE;
             towerParams.twistAngle = 0;
-            updateTowerRealtime();
-            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
-              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
-            });
+            applyPresetWithCamera(200);
           },
           'Office Tower': () => {
             towerParams.baseRadius = 25;
@@ -2235,10 +2264,7 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
             towerParams.taperingMode = TaperingMode.LINEAR;
             towerParams.twistingMode = TwistingMode.UNIFORM;
             towerParams.twistAngle = 45;
-            updateTowerRealtime();
-            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
-              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
-            });
+            applyPresetWithCamera(250);
           },
           'Mixed-Use Tower': () => {
             towerParams.baseRadius = 30;
@@ -2250,10 +2276,7 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
             towerParams.taperingMode = TaperingMode.S_CURVE;
             towerParams.twistingMode = TwistingMode.SINE;
             towerParams.twistAngle = 90;
-            updateTowerRealtime();
-            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
-              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
-            });
+            applyPresetWithCamera(300);
           },
           'Iconic Landmark': () => {
             towerParams.baseRadius = 35;
@@ -2265,10 +2288,7 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
             towerParams.taperingMode = TaperingMode.EXPONENTIAL;
             towerParams.twistingMode = TwistingMode.ACCELERATING;
             towerParams.twistAngle = 180;
-            updateTowerRealtime();
-            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
-              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
-            });
+            applyPresetWithCamera(400);
           },
           'Modern Skyscraper': () => {
             towerParams.baseRadius = 28;
@@ -2280,10 +2300,7 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
             towerParams.taperingMode = TaperingMode.SETBACK;
             towerParams.twistingMode = TwistingMode.UNIFORM;
             towerParams.twistAngle = 30;
-            updateTowerRealtime();
-            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
-              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
-            });
+            applyPresetWithCamera(350);
           }
         };
 
@@ -2312,6 +2329,15 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
 
               // Switch renderer to Tower mode (mode 9)
               renderer.params.mode = 9;
+
+              // Set optimal camera position for tower viewing
+              // Position camera to view full tower height
+              const towerHeight = towerParams.height || 150;
+              const optimalDistance = towerHeight * 0.8; // 80% of tower height for good view
+              renderer.orbitDistance = optimalDistance;
+              renderer.orbitPitch = 0.3; // Slight upward angle
+              renderer.orbitYaw = 0.5; // 45-degree angle
+              renderer.updateOrbitCamera();
 
               // Pass tower parameters to renderer for GLSL
               // For now, use simple parameters that can be used in shader
