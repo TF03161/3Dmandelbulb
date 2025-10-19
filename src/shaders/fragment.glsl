@@ -99,6 +99,17 @@ uniform float uCosExpansion;
 uniform float uCosRipple;
 uniform float uCosSpiral;
 
+// Parametric Tower parameters
+uniform float uTowerBaseRadius;
+uniform float uTowerTopRadius;
+uniform float uTowerHeight;
+uniform float uTowerFloorCount;
+uniform float uTowerFloorHeight;
+uniform float uTowerTwist;
+uniform int uTowerShapeType;
+uniform int uTowerTaperingType;
+uniform int uTowerTwistingType;
+
 vec3 monoBg = vec3(0.0); // Pure black background
 const float PI = 3.14159265358979323846;
 const float TAU = 6.28318530717958647692;
@@ -900,6 +911,121 @@ float cosmicBloomDE(vec3 p, out vec4 orbitTrap) {
   return bloom;
 }
 
+// Parametric Tower SDF
+float parametricTowerDE(vec3 p, out vec4 trap) {
+  float x = p.x;
+  float y = p.y;
+  float z = p.z;
+
+  // Vertical bounds check
+  if (y < 0.0) {
+    trap = vec4(abs(p), -y + 10.0);
+    return -y + 10.0;
+  }
+  if (y > uTowerHeight) {
+    trap = vec4(abs(p), y - uTowerHeight + 10.0);
+    return y - uTowerHeight + 10.0;
+  }
+
+  // Calculate normalized height (0-1)
+  float t = y / max(uTowerHeight, 1e-3);
+
+  // Calculate radius with tapering
+  float radius;
+  if (uTowerTaperingType == 0) {
+    // None
+    radius = uTowerBaseRadius;
+  } else if (uTowerTaperingType == 1) {
+    // Linear
+    radius = uTowerBaseRadius - (uTowerBaseRadius - uTowerTopRadius) * t;
+  } else if (uTowerTaperingType == 2) {
+    // Exponential
+    radius = uTowerBaseRadius * pow(uTowerTopRadius / max(uTowerBaseRadius, 1e-3), t);
+  } else if (uTowerTaperingType == 3) {
+    // S-Curve (smoothstep)
+    float s = t * t * (3.0 - 2.0 * t);
+    radius = uTowerBaseRadius - (uTowerBaseRadius - uTowerTopRadius) * s;
+  } else {
+    // Setback
+    float step = floor(t * 4.0) / 4.0;
+    radius = uTowerBaseRadius - (uTowerBaseRadius - uTowerTopRadius) * step;
+  }
+
+  // Calculate rotation with twisting
+  float rotation = 0.0;
+  if (uTowerTwistingType == 1) {
+    // Uniform
+    rotation = uTowerTwist * t;
+  } else if (uTowerTwistingType == 2) {
+    // Accelerating
+    rotation = uTowerTwist * t * t;
+  } else if (uTowerTwistingType == 3) {
+    // Sine
+    rotation = uTowerTwist * sin(t * PI / 2.0);
+  }
+
+  // Apply rotation
+  float cos_r = cos(-rotation);
+  float sin_r = sin(-rotation);
+  float rx = x * cos_r - z * sin_r;
+  float rz = x * sin_r + z * cos_r;
+
+  // Distance from center in XZ plane
+  float dist2D = length(vec2(rx, rz));
+
+  // Shape-based distance
+  float shapeDist;
+  float angle = atan(rz, rx);
+
+  if (uTowerShapeType == 0) {
+    // Circle
+    shapeDist = dist2D - radius;
+  } else if (uTowerShapeType == 1) {
+    // Square
+    float cornerDist = max(abs(rx), abs(rz));
+    shapeDist = cornerDist - radius;
+  } else if (uTowerShapeType == 2) {
+    // Triangle
+    float a = mod(angle + PI, TAU / 3.0) - PI / 3.0;
+    float triRadius = radius / cos(PI / 3.0);
+    shapeDist = max(dist2D * cos(a) - triRadius * 0.5, abs(dist2D * sin(a)) - triRadius * 0.866);
+  } else if (uTowerShapeType == 3) {
+    // Pentagon (5 sides)
+    float a = mod(angle + PI, TAU / 5.0) - PI / 5.0;
+    float pentRadius = radius / cos(PI / 5.0);
+    shapeDist = dist2D * cos(a) - pentRadius;
+  } else if (uTowerShapeType == 4) {
+    // Hexagon (6 sides)
+    float a = mod(angle + PI / 6.0, TAU / 6.0) - PI / 6.0;
+    float hexRadius = radius / cos(PI / 6.0);
+    shapeDist = dist2D * cos(a) - hexRadius;
+  } else if (uTowerShapeType == 5) {
+    // Octagon (8 sides)
+    float a = mod(angle + PI / 8.0, TAU / 8.0) - PI / 8.0;
+    float octRadius = radius / cos(PI / 8.0);
+    shapeDist = dist2D * cos(a) - octRadius;
+  } else if (uTowerShapeType == 6) {
+    // Star (5-pointed)
+    float starAngle = mod(angle + PI, TAU / 5.0);
+    float innerRadius = radius * 0.5;
+    float outerRadius = radius;
+    float modAngle = mod(starAngle, TAU / 10.0);
+    float targetRadius = mix(outerRadius, innerRadius, step(TAU / 20.0, modAngle));
+    shapeDist = dist2D - targetRadius;
+  } else {
+    // Default to circle for other shapes
+    shapeDist = dist2D - radius;
+  }
+
+  // Add floor detail (horizontal bands)
+  float floorBands = sin(y / max(uTowerFloorHeight, 1e-3) * TAU) * 0.1;
+  shapeDist -= floorBands;
+
+  trap = vec4(abs(p), shapeDist + 1.0);
+
+  return shapeDist;
+}
+
 // Scene SDF with mode selection
 float sceneSDF(vec3 p, out vec4 trap) {
   if (uMode == 1) {
@@ -928,6 +1054,9 @@ float sceneSDF(vec3 p, out vec4 trap) {
   } else if (uMode == 8) {
     // Cosmic Bloom mode
     return cosmicBloomDE(p, trap);
+  } else if (uMode == 9) {
+    // Parametric Tower mode
+    return parametricTowerDE(p, trap);
   } else {
     // Mode 0: Mandelbulb (default)
     return mandelbulbDE(p, trap);

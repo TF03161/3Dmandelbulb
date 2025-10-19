@@ -2033,9 +2033,8 @@ function setupGUI(renderer: RendererWithParams): void {
         }, 300);
       }, 3000);
 
-      // TODO: Update GUI panels based on mode
-      // In Architecture Mode: show building-specific parameters
-      // In Fractal Mode: show fractal-specific parameters
+      // Update GUI panels based on mode
+      updateGUIPanelsForMode(newMode, gui);
     });
 
     // Initialize mode from localStorage
@@ -2070,6 +2069,209 @@ function setupGUI(renderer: RendererWithParams): void {
   document.head.appendChild(style);
 
   console.log('🎨 UI Controls initialized with Advanced Post-Processing (HDR, Tone Mapping, DOF), Speckle Integration, and Mode Switching');
+}
+
+/**
+ * Update GUI panels based on current mode
+ */
+function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
+  console.log(`Updating GUI for mode: ${mode}`);
+
+  // Get existing folders
+  const folders = (gui as any).folders || [];
+
+  if (mode === AppMode.ARCHITECTURE) {
+    // Architecture Mode: Show building-specific parameters
+    console.log('🏙️ Switching to Architecture Mode GUI');
+
+    // Hide fractal-specific folders (optional)
+    // folders.forEach((folder: any) => {
+    //   if (folder._title && folder._title.includes('Morphing')) {
+    //     folder.hide();
+    //   }
+    // });
+
+    // Create Architecture Mode folder if not exists
+    let archFolder = folders.find((f: any) => f._title === '🏗️ Parametric Tower');
+    if (!archFolder) {
+      archFolder = gui.addFolder('🏗️ Parametric Tower');
+
+      // Import tower generator
+      import('../generators/parametric-tower').then(({ FloorShape, TaperingMode, TwistingMode, DEFAULT_TOWER_PARAMS }) => {
+        const towerParams = { ...DEFAULT_TOWER_PARAMS };
+
+        // Basic Dimensions
+        const dimFolder = archFolder.addFolder('📏 Dimensions');
+        dimFolder.add(towerParams, 'baseRadius', 10, 50, 1).name('Base Radius (m)');
+        dimFolder.add(towerParams, 'height', 50, 500, 10).name('Height (m)');
+        dimFolder.add(towerParams, 'floorCount', 10, 100, 1).name('Floor Count');
+        dimFolder.add(towerParams, 'floorHeight', 2.5, 5.0, 0.1).name('Floor Height (m)');
+
+        // Floor Shape
+        const shapeFolder = archFolder.addFolder('🔷 Floor Shape');
+        const shapeOptions = {
+          'Circle': FloorShape.CIRCLE,
+          'Square': FloorShape.SQUARE,
+          'Triangle': FloorShape.TRIANGLE,
+          'Pentagon': FloorShape.PENTAGON,
+          'Hexagon': FloorShape.HEXAGON,
+          'Octagon': FloorShape.OCTAGON,
+          'Star': FloorShape.STAR,
+          'Cross': FloorShape.CROSS,
+          'L-Shape': FloorShape.L_SHAPE,
+          'T-Shape': FloorShape.T_SHAPE,
+          'H-Shape': FloorShape.H_SHAPE
+        };
+        shapeFolder.add({ value: towerParams.floorShape }, 'value', shapeOptions).name('Shape').onChange((v: string) => {
+          towerParams.floorShape = v as any;
+          console.log('Floor shape changed:', v);
+          // TODO: Regenerate tower
+        });
+        shapeFolder.add(towerParams, 'shapeComplexity', 3, 32, 1).name('Complexity');
+        shapeFolder.add(towerParams, 'cornerRadius', 0, 1, 0.05).name('Corner Radius');
+
+        // Tapering
+        const taperingFolder = archFolder.addFolder('📐 Tapering');
+        const taperingOptions = {
+          'None': TaperingMode.NONE,
+          'Linear': TaperingMode.LINEAR,
+          'Exponential': TaperingMode.EXPONENTIAL,
+          'S-Curve': TaperingMode.S_CURVE,
+          'Setback': TaperingMode.SETBACK
+        };
+        taperingFolder.add({ value: towerParams.taperingMode }, 'value', taperingOptions).name('Mode').onChange((v: string) => {
+          towerParams.taperingMode = v as any;
+          console.log('Tapering mode changed:', v);
+        });
+        taperingFolder.add(towerParams, 'taperingAmount', 0, 1, 0.05).name('Amount');
+        taperingFolder.add(towerParams, 'topRadius', 5, 50, 1).name('Top Radius (m)');
+
+        // Twisting
+        const twistingFolder = archFolder.addFolder('🌀 Twisting');
+        const twistingOptions = {
+          'None': TwistingMode.NONE,
+          'Uniform': TwistingMode.UNIFORM,
+          'Accelerating': TwistingMode.ACCELERATING,
+          'Sine': TwistingMode.SINE
+        };
+        twistingFolder.add({ value: towerParams.twistingMode }, 'value', twistingOptions).name('Mode').onChange((v: string) => {
+          towerParams.twistingMode = v as any;
+          console.log('Twisting mode changed:', v);
+        });
+        twistingFolder.add(towerParams, 'twistAngle', 0, 720, 10).name('Twist Angle (°)');
+        twistingFolder.add(towerParams, 'twistLevels', 5, 50, 1).name('Levels');
+
+        // Variations
+        const varFolder = archFolder.addFolder('🎲 Variations');
+        varFolder.add(towerParams, 'floorVariation', 0, 0.5, 0.05).name('Floor Variation');
+        varFolder.add(towerParams, 'asymmetry', 0, 1, 0.05).name('Asymmetry');
+
+        // Facade
+        const facadeFolder = archFolder.addFolder('🏢 Facade');
+        facadeFolder.add(towerParams, 'facadeGridX', 1, 10, 0.5).name('Grid X (m)');
+        facadeFolder.add(towerParams, 'facadeGridZ', 1, 10, 0.5).name('Grid Z (m)');
+        facadeFolder.add(towerParams, 'panelDepth', 0, 0.5, 0.05).name('Panel Depth (m)');
+        facadeFolder.add(towerParams, 'balconyRatio', 0, 0.3, 0.05).name('Balcony Ratio');
+
+        // Generate button
+        const generateBtn = {
+          generate: () => {
+            console.log('🏗️ Generating parametric tower...');
+            const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+            if (!renderer) {
+              console.error('Renderer not available');
+              return;
+            }
+
+            import('../generators/parametric-tower').then(({ generateParametricTower }) => {
+              const tower = generateParametricTower(towerParams);
+              console.log('Tower generated:', tower);
+
+              // Switch to Architecture mode if not already
+              if (modeManager.getCurrentMode() !== AppMode.ARCHITECTURE) {
+                modeManager.switchToMode(AppMode.ARCHITECTURE);
+              }
+
+              // Switch renderer to Tower mode (mode 9)
+              renderer.params.mode = 9;
+
+              // Pass tower parameters to renderer for GLSL
+              // For now, use simple parameters that can be used in shader
+              if ((renderer as any).towerParams === undefined) {
+                (renderer as any).towerParams = {};
+              }
+
+              (renderer as any).towerParams = {
+                baseRadius: towerParams.baseRadius,
+                topRadius: towerParams.topRadius,
+                height: towerParams.height,
+                floorCount: towerParams.floorCount,
+                floorHeight: towerParams.floorHeight,
+                twistAngle: towerParams.twistAngle * Math.PI / 180,
+                shapeType: Object.values({
+                  circle: 0, square: 1, triangle: 2, pentagon: 3,
+                  hexagon: 4, octagon: 5, star: 6, cross: 7,
+                  'l-shape': 8, 't-shape': 9, 'h-shape': 10
+                })[Object.keys({
+                  circle: 0, square: 1, triangle: 2, pentagon: 3,
+                  hexagon: 4, octagon: 5, star: 6, cross: 7,
+                  'l-shape': 8, 't-shape': 9, 'h-shape': 10
+                }).indexOf(towerParams.floorShape)] || 0,
+                taperingType: Object.values({
+                  none: 0, linear: 1, exponential: 2, 's-curve': 3, setback: 4
+                })[Object.keys({
+                  none: 0, linear: 1, exponential: 2, 's-curve': 3, setback: 4
+                }).indexOf(towerParams.taperingMode)] || 1,
+                twistingType: Object.values({
+                  none: 0, uniform: 1, accelerating: 2, sine: 3
+                })[Object.keys({
+                  none: 0, uniform: 1, accelerating: 2, sine: 3
+                }).indexOf(towerParams.twistingMode)] || 0
+              };
+
+              console.log('✅ Tower parameters sent to renderer:', (renderer as any).towerParams);
+
+              // Show notification
+              const notification = document.createElement('div');
+              notification.textContent = `🏗️ Tower Generated: ${towerParams.floorShape}, ${towerParams.floorCount} floors`;
+              notification.style.cssText = `
+                position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+                background: rgba(0, 255, 204, 0.9); color: #000; padding: 12px 24px;
+                border-radius: 8px; font-weight: 600; z-index: 10000;
+                animation: slideDown 0.3s ease-out;
+              `;
+              document.body.appendChild(notification);
+              setTimeout(() => {
+                notification.style.animation = 'slideUp 0.3s ease-out';
+                setTimeout(() => notification.remove(), 300);
+              }, 2000);
+            });
+          }
+        };
+        archFolder.add(generateBtn, 'generate').name('🔨 Generate Tower');
+
+        archFolder.open();
+      });
+    }
+
+  } else {
+    // Fractal Mode: Show fractal parameters
+    console.log('🌀 Switching to Fractal Mode GUI');
+
+    // Hide architecture folders
+    folders.forEach((folder: any) => {
+      if (folder._title && folder._title.includes('Parametric Tower')) {
+        folder.hide();
+      }
+    });
+
+    // Show fractal folders
+    folders.forEach((folder: any) => {
+      if (folder._title && !folder._title.includes('Parametric Tower')) {
+        folder.show();
+      }
+    });
+  }
 }
 
 // Initialize when DOM is ready

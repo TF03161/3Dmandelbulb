@@ -82,6 +82,16 @@ interface UniformLocations {
   uCosExpansion: WebGLUniformLocation | null;
   uCosRipple: WebGLUniformLocation | null;
   uCosSpiral: WebGLUniformLocation | null;
+  // Parametric Tower uniforms
+  uTowerBaseRadius: WebGLUniformLocation | null;
+  uTowerTopRadius: WebGLUniformLocation | null;
+  uTowerHeight: WebGLUniformLocation | null;
+  uTowerFloorCount: WebGLUniformLocation | null;
+  uTowerFloorHeight: WebGLUniformLocation | null;
+  uTowerTwist: WebGLUniformLocation | null;
+  uTowerShapeType: WebGLUniformLocation | null;
+  uTowerTaperingType: WebGLUniformLocation | null;
+  uTowerTwistingType: WebGLUniformLocation | null;
 }
 
 interface RenderParams {
@@ -409,7 +419,17 @@ class WebGLRenderer {
       uCosRadius: gl.getUniformLocation(this.program, 'uCosRadius'),
       uCosExpansion: gl.getUniformLocation(this.program, 'uCosExpansion'),
       uCosRipple: gl.getUniformLocation(this.program, 'uCosRipple'),
-      uCosSpiral: gl.getUniformLocation(this.program, 'uCosSpiral')
+      uCosSpiral: gl.getUniformLocation(this.program, 'uCosSpiral'),
+      // Parametric Tower uniforms
+      uTowerBaseRadius: gl.getUniformLocation(this.program, 'uTowerBaseRadius'),
+      uTowerTopRadius: gl.getUniformLocation(this.program, 'uTowerTopRadius'),
+      uTowerHeight: gl.getUniformLocation(this.program, 'uTowerHeight'),
+      uTowerFloorCount: gl.getUniformLocation(this.program, 'uTowerFloorCount'),
+      uTowerFloorHeight: gl.getUniformLocation(this.program, 'uTowerFloorHeight'),
+      uTowerTwist: gl.getUniformLocation(this.program, 'uTowerTwist'),
+      uTowerShapeType: gl.getUniformLocation(this.program, 'uTowerShapeType'),
+      uTowerTaperingType: gl.getUniformLocation(this.program, 'uTowerTaperingType'),
+      uTowerTwistingType: gl.getUniformLocation(this.program, 'uTowerTwistingType')
     };
   }
 
@@ -802,6 +822,22 @@ class WebGLRenderer {
     gl.uniform1f(uniforms.uCosExpansion, params.cosExpansion);
     gl.uniform1f(uniforms.uCosRipple, params.cosRipple);
     gl.uniform1f(uniforms.uCosSpiral, params.cosSpiral);
+
+    // Parametric Tower uniforms
+    const towerParams = (this as any).towerParams || {
+      baseRadius: 20, topRadius: 14, height: 150, floorCount: 50,
+      floorHeight: 3.0, twistAngle: 0, shapeType: 0,
+      taperingType: 1, twistingType: 0
+    };
+    gl.uniform1f(uniforms.uTowerBaseRadius, towerParams.baseRadius);
+    gl.uniform1f(uniforms.uTowerTopRadius, towerParams.topRadius);
+    gl.uniform1f(uniforms.uTowerHeight, towerParams.height);
+    gl.uniform1f(uniforms.uTowerFloorCount, towerParams.floorCount);
+    gl.uniform1f(uniforms.uTowerFloorHeight, towerParams.floorHeight);
+    gl.uniform1f(uniforms.uTowerTwist, towerParams.twistAngle);
+    gl.uniform1i(uniforms.uTowerShapeType, towerParams.shapeType);
+    gl.uniform1i(uniforms.uTowerTaperingType, towerParams.taperingType);
+    gl.uniform1i(uniforms.uTowerTwistingType, towerParams.twistingType);
 
     // Draw fullscreen triangle
     gl.drawArrays(gl.TRIANGLES, 0, 3);
