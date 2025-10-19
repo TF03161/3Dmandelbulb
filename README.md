@@ -152,6 +152,92 @@ Use any glTF viewer:
 - **Output**: Triangle mesh with vertex normals
 - **Typical Size**: 2-20 MB depending on resolution
 
+## ☁️ Speckle Cloud Integration
+
+Upload architectural models directly to Speckle BIM platform for real-time collaboration and integration with Revit, Rhino, Grasshopper, Blender, and more.
+
+### Quick Upload
+
+1. **Get Personal Access Token**
+   - Visit: https://speckle.xyz/profile
+   - Generate a new token
+   - Copy the token
+
+2. **Configure in GUI**
+   - Open the ☁️ Speckle Cloud folder in lil-gui
+   - Paste your Access Token
+   - (Optional) Set Stream ID, Branch Name, Commit Message
+
+3. **Upload**
+   - Click ☁️ Upload to Speckle button
+   - Wait for upload to complete
+   - View your model at the provided URL
+
+### Supported Fractals
+
+- **Mandelbulb** (mode 0)
+- **Mandelbox** (mode 3)
+- **Gyroid** (mode 5)
+
+### What Gets Uploaded
+
+All architectural components are converted to Speckle objects:
+
+| Component | Speckle Type |
+|-----------|--------------|
+| Shell | Objects.Geometry.Mesh |
+| Frame | Objects.Geometry.Line (array) |
+| Floors | Objects.Geometry.Mesh (array) |
+| Core | Objects.Geometry.Polyline |
+| Panels | Objects.Geometry.Mesh (array) |
+
+### Metadata Included
+
+- Fractal type (mandelbulb, mandelbox, gyroid)
+- Export date/time
+- Application version
+- Units (meters)
+- Custom description and commit message
+
+### Integration Workflow
+
+1. **3Dmandelbulb** → Generate fractal architecture
+2. **Speckle Cloud** → Upload and store
+3. **Revit/Rhino/Grasshopper** → Download via Speckle plugin
+4. **Edit & Refine** → Use professional BIM tools
+5. **Collaborate** → Share with team via Speckle streams
+
+### Advanced Options
+
+**Server URL:** Default is `https://speckle.xyz`, but you can use self-hosted Speckle servers
+
+**Stream ID:** Leave empty to create a new stream, or provide existing stream ID to update
+
+**Branch Name:** Default is `main`, use custom branches for versioning
+
+**Commit Message:** Auto-generated or custom message describing the export
+
+### Viewing on Speckle
+
+After upload, you'll receive a URL like:
+```
+https://speckle.xyz/streams/{streamId}/commits/{commitId}
+```
+
+Open this URL to view your model in Speckle's 3D viewer with:
+- Real-time 3D navigation
+- Object properties
+- Comments and annotations
+- Version history
+
+### Technical Details
+
+- **API:** Speckle GraphQL API + REST endpoints
+- **Authentication:** Bearer token (Personal Access Token)
+- **Transport:** JSON serialization with nested objects
+- **Timeout:** 60 seconds per request
+- **Max Size:** Depends on Speckle plan (typically 100MB+)
+
 ## Miyabi Framework
 
 This project uses **7 autonomous AI agents**:

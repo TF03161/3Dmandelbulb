@@ -1751,7 +1751,211 @@ function setupGUI(renderer: RendererWithParams): void {
 
   postFolder.open();
 
-  console.log('🎨 UI Controls initialized with Advanced Post-Processing (HDR, Tone Mapping, DOF)');
+  // ================================================================
+  // Speckle Integration
+  // ================================================================
+
+  const speckleFolder = gui.addFolder('☁️ Speckle Cloud');
+
+  // Speckle configuration object
+  const speckleConfig = {
+    serverUrl: 'https://speckle.xyz',
+    token: '',
+    streamId: '',
+    branchName: 'main',
+    commitMessage: ''
+  };
+
+  speckleFolder.add(speckleConfig, 'serverUrl').name('Server URL');
+  speckleFolder.add(speckleConfig, 'token').name('Access Token');
+  speckleFolder.add(speckleConfig, 'streamId').name('Stream ID (optional)');
+  speckleFolder.add(speckleConfig, 'branchName').name('Branch Name');
+  speckleFolder.add(speckleConfig, 'commitMessage').name('Commit Message');
+
+  // Speckle Upload Button Handler
+  const btnUploadSpeckle = document.getElementById('btnUploadSpeckle') as HTMLButtonElement;
+  if (btnUploadSpeckle) {
+    btnUploadSpeckle.addEventListener('click', async () => {
+      // Validation
+      if (!speckleConfig.token || speckleConfig.token.trim() === '') {
+        alert('Please enter your Speckle Personal Access Token in the GUI controls.\n\nYou can generate one at: https://speckle.xyz/profile');
+        return;
+      }
+
+      // Create progress overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        color: white;
+        font-family: system-ui;
+        backdrop-filter: blur(10px);
+      `;
+
+      const statusText = document.createElement('div');
+      statusText.style.cssText = `
+        font-size: 20px;
+        margin-bottom: 20px;
+        text-align: center;
+      `;
+      statusText.textContent = '☁️ Uploading to Speckle...';
+
+      const progressBar = document.createElement('div');
+      progressBar.style.cssText = `
+        width: 400px;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        overflow: hidden;
+      `;
+
+      const progressFill = document.createElement('div');
+      progressFill.style.cssText = `
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, #00ffcc, #87ceeb);
+        transition: width 0.3s;
+      `;
+      progressBar.appendChild(progressFill);
+
+      const detailText = document.createElement('div');
+      detailText.style.cssText = `
+        font-size: 14px;
+        margin-top: 16px;
+        opacity: 0.7;
+        text-align: center;
+      `;
+
+      overlay.appendChild(statusText);
+      overlay.appendChild(progressBar);
+      overlay.appendChild(detailText);
+      document.body.appendChild(overlay);
+
+      try {
+        // Determine which SDF to use based on mode
+        let sdfFunc: (p: Vec3) => number;
+        let modelName = 'Fractal';
+
+        if (r.params.mode === 0) {
+          // Mandelbulb
+          const { sdfMandelbulb } = await import('../export/sdf/mandelbulb');
+          sdfFunc = (p) => sdfMandelbulb(p, {
+            power: r.params.powerBase + r.params.powerAmp,
+            iterations: r.params.maxIterations,
+            bailout: 4.0
+          });
+          modelName = 'Mandelbulb';
+        } else if (r.params.mode === 3) {
+          // Mandelbox
+          const { sdfMandelbox } = await import('../export/sdf/mandelbox');
+          sdfFunc = (p) => sdfMandelbox(p, {
+            scale: r.params.mbScale,
+            minRadius: r.params.mbMinRadius,
+            fixedRadius: r.params.mbFixedRadius,
+            iterations: r.params.mbIter
+          });
+          modelName = 'Mandelbox';
+        } else if (r.params.mode === 5) {
+          // Gyroid
+          const { sdfGyroid } = await import('../export/sdf/gyroid');
+          sdfFunc = (p) => sdfGyroid(p, {
+            scale: r.params.gyroScale,
+            level: r.params.gyroLevel,
+            mod: r.params.gyroMod
+          });
+          modelName = 'Gyroid';
+        } else {
+          throw new Error('Selected mode is not supported for Speckle upload. Please use Mandelbulb, Mandelbox, or Gyroid.');
+        }
+
+        detailText.textContent = `Building ${modelName} architecture...`;
+
+        // Build architectural model
+        const { buildArchitecturalModel } = await import('../pipelines/build-architectural-model');
+        const bbox = {
+          min: [-4, -4, -4] as Vec3,
+          max: [4, 4, 4] as Vec3
+        };
+
+        const archModel = buildArchitecturalModel(sdfFunc, bbox, {
+          resolution: 192,
+          extractShell: true,
+          extractFrame: true,
+          extractFloors: true,
+          extractCore: true,
+          extractPanels: true
+        });
+
+        progressFill.style.width = '30%';
+        detailText.textContent = 'Converting to Speckle format...';
+
+        // Upload to Speckle
+        const { uploadToSpeckle } = await import('../export/speckle-uploader');
+
+        const metadata = {
+          name: `${modelName} Architecture - ${new Date().toISOString()}`,
+          description: `Fractal-derived architectural model from 3Dmandelbulb`,
+          fractal_type: modelName.toLowerCase(),
+          export_date: new Date().toISOString(),
+          application: '3Dmandelbulb',
+          version: '1.0',
+          units: 'm'
+        };
+
+        const result = await uploadToSpeckle(
+          archModel,
+          {
+            serverUrl: speckleConfig.serverUrl,
+            token: speckleConfig.token,
+            streamId: speckleConfig.streamId || undefined,
+            branchName: speckleConfig.branchName || 'main',
+            commitMessage: speckleConfig.commitMessage || `${modelName} export - ${new Date().toISOString()}`
+          },
+          metadata,
+          (message, progress) => {
+            progressFill.style.width = `${30 + progress * 70}%`;
+            detailText.textContent = message;
+          }
+        );
+
+        if (result.success) {
+          statusText.textContent = '✅ Upload Successful!';
+          detailText.innerHTML = `
+            <div style="margin-top: 20px;">
+              <strong>Stream ID:</strong> ${result.streamId}<br>
+              <strong>Commit ID:</strong> ${result.commitId}<br>
+              <strong>View on Speckle:</strong> <a href="${result.url}" target="_blank" style="color: #87ceeb;">${result.url}</a>
+            </div>
+            <div style="margin-top: 16px; font-size: 12px; opacity: 0.6;">
+              Click anywhere to close
+            </div>
+          `;
+          progressFill.style.width = '100%';
+        } else {
+          throw new Error(result.error || 'Upload failed');
+        }
+
+      } catch (error) {
+        console.error('Speckle upload error:', error);
+        statusText.textContent = '❌ Upload Failed';
+        detailText.textContent = error instanceof Error ? error.message : 'Unknown error';
+        progressFill.style.background = '#ff4d4d';
+      }
+
+      // Close on click
+      overlay.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+      });
+    });
+  }
+
+  console.log('🎨 UI Controls initialized with Advanced Post-Processing (HDR, Tone Mapping, DOF) and Speckle Integration');
 }
 
 // Initialize when DOM is ready

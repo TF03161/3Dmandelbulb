@@ -36,6 +36,8 @@
     "@gltf-transform/core": "^4.2.1",
     "@gltf-transform/extensions": "^4.2.1",
     "@gltf-transform/functions": "^4.2.1",
+    "@speckle/objectloader": "^2.26.5",
+    "@speckle/viewer": "^2.26.5",
     "lil-gui": "^0.21.0"
   }
 }
