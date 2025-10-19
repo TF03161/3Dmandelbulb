@@ -274,17 +274,52 @@
       color: rgba(229, 229, 229, 0.8);
       margin-right: 8px;
     }
+    .mode-switch {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      font-weight: 600;
+      font-size: 13px;
+      background: linear-gradient(135deg, rgba(0, 255, 204, 0.15), rgba(135, 206, 250, 0.15));
+      border: 2px solid var(--accent);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .mode-switch:hover {
+      background: linear-gradient(135deg, rgba(0, 255, 204, 0.25), rgba(135, 206, 250, 0.25));
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 255, 204, 0.3);
+    }
+    .mode-switch #mode-icon {
+      font-size: 16px;
+      display: inline-block;
+      transition: transform 0.3s;
+    }
+    .mode-switch:hover #mode-icon {
+      transform: rotate(180deg) scale(1.2);
+    }
+    .mode-switch.architecture {
+      background: linear-gradient(135deg, rgba(255, 165, 0, 0.15), rgba(255, 215, 0, 0.15));
+      border-color: #ffa500;
+    }
+    .mode-switch.architecture:hover {
+      background: linear-gradient(135deg, rgba(255, 165, 0, 0.25), rgba(255, 215, 0, 0.25));
+      box-shadow: 0 4px 12px rgba(255, 165, 0, 0.3);
+    }
   </style>
 </head>
 <body>
   <div id="app">
     <header>
       <h1>🌸 3D Mandelbulb Visualizer</h1>
+      <button id="btnModeSwitch" class="control-btn mode-switch" title="Switch between Fractal and Architecture modes">
+        <span id="mode-icon">🌀</span>
+        <span id="mode-text">Fractal Mode</span>
+      </button>
       <div class="sep"></div>
       <div class="badge live">LIVE</div>
       <div class="pill">Miyabi Framework</div>
-    </header>
-    <main>
+    </header>    <main>
       <canvas id="gl"></canvas>
       <div id="color-palette">
         <h3>🎨 Color Themes</h3>

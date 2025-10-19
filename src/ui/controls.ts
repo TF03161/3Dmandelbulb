@@ -4,6 +4,8 @@
  */
 
 import GUI from 'lil-gui';
+import { modeManager } from '../modes/mode-manager';
+import { AppMode, MODE_CONFIGS } from '../modes/mode-types';
 
 interface RendererWithParams {
   params: {
@@ -1955,7 +1957,119 @@ function setupGUI(renderer: RendererWithParams): void {
     });
   }
 
-  console.log('🎨 UI Controls initialized with Advanced Post-Processing (HDR, Tone Mapping, DOF) and Speckle Integration');
+  // ================================================================
+  // Mode Switching System
+  // ================================================================
+
+  const btnModeSwitch = document.getElementById('btnModeSwitch') as HTMLButtonElement;
+  const modeIcon = document.getElementById('mode-icon');
+  const modeText = document.getElementById('mode-text');
+
+  if (btnModeSwitch && modeIcon && modeText) {
+    // Update UI based on current mode
+    const updateModeUI = (mode: AppMode) => {
+      const config = MODE_CONFIGS[mode];
+
+      modeIcon.textContent = config.icon;
+      modeText.textContent = config.name;
+
+      // Toggle CSS class
+      if (mode === AppMode.ARCHITECTURE) {
+        btnModeSwitch.classList.add('architecture');
+      } else {
+        btnModeSwitch.classList.remove('architecture');
+      }
+
+      console.log(`Mode UI updated: ${mode} (${config.name})`);
+    };
+
+    // Handle mode switch button click
+    btnModeSwitch.addEventListener('click', () => {
+      modeManager.toggleMode();
+    });
+
+    // Register mode change callback
+    modeManager.onModeChange((newMode, oldMode) => {
+      console.log(`🔄 Mode changed: ${oldMode} → ${newMode}`);
+      updateModeUI(newMode);
+
+      // Show transition notification
+      const notification = document.createElement('div');
+      notification.style.cssText = `
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.85));
+        border: 2px solid ${newMode === AppMode.ARCHITECTURE ? '#ffa500' : 'var(--accent)'};
+        color: white;
+        padding: 16px 32px;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 600;
+        z-index: 10000;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+        animation: slideDown 0.3s ease-out;
+      `;
+
+      const config = MODE_CONFIGS[newMode];
+      notification.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 24px;">${config.icon}</span>
+          <div>
+            <div style="font-size: 16px; margin-bottom: 4px;">${config.name}</div>
+            <div style="font-size: 12px; opacity: 0.7;">${config.description}</div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(notification);
+
+      // Remove after 3 seconds
+      setTimeout(() => {
+        notification.style.animation = 'slideUp 0.3s ease-in';
+        setTimeout(() => {
+          document.body.removeChild(notification);
+        }, 300);
+      }, 3000);
+
+      // TODO: Update GUI panels based on mode
+      // In Architecture Mode: show building-specific parameters
+      // In Fractal Mode: show fractal-specific parameters
+    });
+
+    // Initialize mode from localStorage
+    modeManager.loadMode();
+    updateModeUI(modeManager.getCurrentMode());
+  }
+
+  // Add CSS animations for notifications
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+    @keyframes slideUp {
+      from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  console.log('🎨 UI Controls initialized with Advanced Post-Processing (HDR, Tone Mapping, DOF), Speckle Integration, and Mode Switching');
 }
 
 // Initialize when DOM is ready
