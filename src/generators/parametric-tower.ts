@@ -70,6 +70,9 @@ export interface TowerParameters {
   facadeGridZ: number;       // Vertical grid spacing (default: 3.0m)
   panelDepth: number;        // Panel depth variation (0-0.5m, default: 0.1)
   balconyRatio: number;      // Ratio of balconies (0-0.3, default: 0)
+  balconyDepth: number;      // Balcony depth (0-0.2, default: 0.1)
+  windowSize: number;        // Window size (0-1.0, default: 0.5)
+  facadeType: 'grid' | 'curtain-wall' | 'panels'; // Facade type
 }
 
 export interface TowerFloor {
@@ -97,25 +100,28 @@ export interface TowerGeometry {
  * Default tower parameters
  */
 export const DEFAULT_TOWER_PARAMS: TowerParameters = {
-  baseRadius: 20,
-  height: 150,
-  floorCount: 50,
-  floorHeight: 3.0,
-  floorShape: FloorShape.CIRCLE,
+  baseRadius: 0.8,      // Smaller radius for better visibility in raymarcher
+  height: 5.0,          // Reasonable height for raymarching scale
+  floorCount: 40,       // Good number of floors for detail
+  floorHeight: 0.125,   // Floor height (5.0 / 40 = 0.125)
+  floorShape: FloorShape.SQUARE,
   shapeComplexity: 16,
   cornerRadius: 0.1,
   taperingMode: TaperingMode.LINEAR,
   taperingAmount: 0.3,
-  topRadius: 14,
+  topRadius: 0.6,       // Proportional to baseRadius
   twistingMode: TwistingMode.NONE,
   twistAngle: 0,
   twistLevels: 10,
   floorVariation: 0,
   asymmetry: 0,
-  facadeGridX: 3.0,
-  facadeGridZ: 3.0,
-  panelDepth: 0.1,
-  balconyRatio: 0
+  facadeGridX: 0.2,     // Proportional to new scale
+  facadeGridZ: 0.2,     // Proportional to new scale
+  panelDepth: 0.05,     // Proportional to new scale
+  balconyRatio: 0,
+  balconyDepth: 0.1,    // Default balcony depth
+  windowSize: 0.5,      // Medium window size
+  facadeType: 'grid'    // Default grid facade
 };
 
 /**
@@ -533,4 +539,125 @@ function generateFacadePanels(
   }
 
   return panels;
+}
+
+/**
+ * Calculate floor area based on shape and radius
+ */
+export function calculateFloorArea(shape: FloorShape, radius: number): number {
+  switch (shape) {
+    case FloorShape.CIRCLE:
+      return Math.PI * radius * radius;
+
+    case FloorShape.SQUARE:
+      // Square inscribed in circle
+      const side = radius * Math.sqrt(2);
+      return side * side;
+
+    case FloorShape.TRIANGLE:
+      // Equilateral triangle inscribed in circle
+      return (3 * Math.sqrt(3) / 4) * Math.pow(radius * Math.sqrt(3), 2);
+
+    case FloorShape.PENTAGON:
+      // Regular pentagon inscribed in circle
+      return (5 * radius * radius * Math.sin(2 * Math.PI / 5)) / 2;
+
+    case FloorShape.HEXAGON:
+      // Regular hexagon inscribed in circle
+      return (3 * Math.sqrt(3) / 2) * radius * radius;
+
+    case FloorShape.OCTAGON:
+      // Regular octagon inscribed in circle
+      return 2 * radius * radius * Math.sqrt(2);
+
+    case FloorShape.STAR:
+      // Approximate star area (outer + inner triangles)
+      return Math.PI * radius * radius * 0.6; // ~60% of circle
+
+    case FloorShape.CROSS:
+      // Cross shape approximation
+      return radius * radius * 5; // 5 squares worth
+
+    case FloorShape.L_SHAPE:
+      // L-shape approximation
+      return radius * radius * 3;
+
+    case FloorShape.T_SHAPE:
+      // T-shape approximation
+      return radius * radius * 3.5;
+
+    case FloorShape.H_SHAPE:
+      // H-shape approximation
+      return radius * radius * 4;
+
+    default:
+      return Math.PI * radius * radius;
+  }
+}
+
+/**
+ * Calculate total building statistics
+ */
+export interface BuildingStats {
+  totalFloorArea: number;      // m²
+  averageFloorArea: number;    // m²
+  buildingVolume: number;      // m³
+  grossFloorArea: number;      // GFA (延床面積) m²
+  floorAreaRatio: number;      // 容積率 (FAR)
+  buildingCoverage: number;    // 建蔽率
+}
+
+export function calculateBuildingStats(params: TowerParameters): BuildingStats {
+  let totalFloorArea = 0;
+
+  // Calculate area for each floor (considering tapering)
+  for (let i = 0; i < params.floorCount; i++) {
+    const t = i / (params.floorCount - 1);
+    const radius = calculateRadiusAtHeight(t, params);
+    const floorArea = calculateFloorArea(params.floorShape, radius);
+    totalFloorArea += floorArea;
+  }
+
+  const averageFloorArea = totalFloorArea / params.floorCount;
+  const baseArea = calculateFloorArea(params.floorShape, params.baseRadius);
+  const buildingVolume = totalFloorArea * params.floorHeight;
+
+  // 容積率 = 延床面積 / 敷地面積 (assuming site area = base area)
+  const floorAreaRatio = totalFloorArea / baseArea;
+
+  // 建蔽率 = 建築面積 / 敷地面積 (building footprint / site area)
+  const buildingCoverage = baseArea / baseArea; // = 1.0 (100%)
+
+  return {
+    totalFloorArea,
+    averageFloorArea,
+    buildingVolume,
+    grossFloorArea: totalFloorArea,
+    floorAreaRatio,
+    buildingCoverage
+  };
+}
+
+/**
+ * Helper: Calculate radius at normalized height
+ */
+function calculateRadiusAtHeight(t: number, params: TowerParameters): number {
+  const { baseRadius, topRadius, taperingMode } = params;
+
+  switch (taperingMode) {
+    case TaperingMode.NONE:
+      return baseRadius;
+    case TaperingMode.LINEAR:
+      return baseRadius - (baseRadius - topRadius) * t;
+    case TaperingMode.EXPONENTIAL:
+      return baseRadius * Math.pow(topRadius / baseRadius, t);
+    case TaperingMode.S_CURVE:
+      const s = t * t * (3 - 2 * t);
+      return baseRadius - (baseRadius - topRadius) * s;
+    case TaperingMode.SETBACK:
+      const step = Math.floor(t * 4) / 4;
+      return baseRadius - (baseRadius - topRadius) * step;
+    default:
+      return baseRadius;
+  }
 }

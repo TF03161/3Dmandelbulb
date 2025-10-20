@@ -2098,66 +2098,274 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
     // Architecture Mode: Show building-specific parameters
     console.log('🏙️ Switching to Architecture Mode GUI');
 
-    // Hide fractal-specific folders (optional)
-    // folders.forEach((folder: any) => {
-    //   if (folder._title && folder._title.includes('Morphing')) {
-    //     folder.hide();
-    //   }
-    // });
+    // Switch renderer to Tower mode (mode 9)
+    const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+    if (renderer) {
+      renderer.params.mode = 9;
+
+      // ===== Architecture Mode Settings =====
+
+      // Disable morphing (buildings don't morph!)
+      renderer.params.morphOn = 0;
+
+      // Disable fractal-specific deformations
+      renderer.params.twist = 0;
+      renderer.params.fold = 0;
+
+      // Architecture-optimized rendering
+      renderer.params.aoIntensity = 1.5;      // Enhanced ambient occlusion for depth
+      renderer.params.reflectivity = 0.15;    // Subtle reflections
+      renderer.params.shadowSoft = 2.0;       // Soft shadows for realism
+      renderer.params.specPow = 16.0;         // Moderate specular highlights
+
+      // Better lighting for architecture
+      renderer.params.maxSteps = 150;         // Good quality without being too slow
+      renderer.params.epsilon = 0.0001;       // Fine detail
+
+      // Enable architecture-specific camera system
+      // Use actual tower height from params if available
+      const towerHeight = ((renderer as any).towerParams?.height) || 5.0;
+      if ((renderer as any).setArchitectureMode) {
+        (renderer as any).setArchitectureMode(true, towerHeight);
+      }
+
+      console.log('✅ Architecture Mode: Tower mode (9), morphing disabled, camera positioned');
+    }
+
+    // Hide all fractal-specific folders
+    const fractalFolderNames = [
+      'Fractal Parameters',
+      'Deformations',
+      'Flower of Life',
+      'Fibonacci Shell',
+      'Mandelbox',
+      'Metatron Cube',
+      'Gyroid Cathedral',
+      'Typhoon',
+      'Quaternion Julia',
+      'Cosmic Bloom',
+      'Shape Presets'
+    ];
+
+    folders.forEach((folder: any) => {
+      if (folder._title) {
+        // Hide fractal-specific folders
+        const shouldHide = fractalFolderNames.some(name => folder._title.includes(name));
+        if (shouldHide) {
+          folder.hide();
+        }
+
+        // Show Architecture folder
+        if (folder._title === '🏗️ Parametric Tower') {
+          folder.show();
+          folder.open();
+        }
+      }
+    });
 
     // Create Architecture Mode folder if not exists
     let archFolder = folders.find((f: any) => f._title === '🏗️ Parametric Tower');
     if (!archFolder) {
+      // Create folder immediately (not inside async import)
       archFolder = gui.addFolder('🏗️ Parametric Tower');
+      archFolder.open(); // Open by default
+      folders.push(archFolder);
 
-      // Import tower generator
+      // Import tower generator and populate folder
       import('../generators/parametric-tower').then(({ FloorShape, TaperingMode, TwistingMode, DEFAULT_TOWER_PARAMS }) => {
         const towerParams = { ...DEFAULT_TOWER_PARAMS };
 
         // Real-time tower update function
         const updateTowerRealtime = () => {
           const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
-          if (!renderer || renderer.params.mode !== 9) return;
+          if (!renderer) return;
+
+          // Ensure we're in Tower mode with architecture settings
+          if (renderer.params.mode !== 9) {
+            renderer.params.mode = 9;
+            console.log('🔄 Auto-switched to Tower mode (9)');
+          }
+
+          // Architecture Mode: Disable morphing and deformations
+          renderer.params.morphOn = 0;
+          renderer.params.twist = 0;
+          renderer.params.fold = 0;
+
+          // Architecture-optimized rendering (apply once)
+          if (!renderer.params.aoIntensity || renderer.params.aoIntensity < 1.0) {
+            renderer.params.aoIntensity = 1.5;
+            renderer.params.reflectivity = 0.15;
+            renderer.params.shadowSoft = 2.0;
+            renderer.params.specPow = 16.0;
+            renderer.params.maxSteps = 150;
+            renderer.params.epsilon = 0.0001;
+          }
 
           // Update renderer tower parameters immediately
-          (renderer as any).towerParams = {
+          // Map enums to shader integer values
+          const shapeMap: Record<string, number> = {
+            'circle': 0, 'square': 1, 'triangle': 2, 'pentagon': 3,
+            'hexagon': 4, 'octagon': 5, 'star': 6, 'cross': 7,
+            'l-shape': 8, 't-shape': 9, 'h-shape': 10
+          };
+          const taperingMap: Record<string, number> = {
+            'none': 0, 'linear': 1, 'exponential': 2, 's-curve': 3, 'setback': 4
+          };
+          const twistingMap: Record<string, number> = {
+            'none': 0, 'uniform': 1, 'accelerating': 2, 'sine': 3
+          };
+
+          const facadeMap: Record<string, number> = {
+            'grid': 0, 'curtain-wall': 1, 'panels': 2
+          };
+
+          const updatedParams = {
             baseRadius: towerParams.baseRadius,
             topRadius: towerParams.topRadius,
             height: towerParams.height,
             floorCount: towerParams.floorCount,
             floorHeight: towerParams.floorHeight,
             twistAngle: towerParams.twistAngle * Math.PI / 180,
-            shapeType: Object.values({
-              circle: 0, square: 1, triangle: 2, pentagon: 3,
-              hexagon: 4, octagon: 5, star: 6, cross: 7,
-              'l-shape': 8, 't-shape': 9, 'h-shape': 10
-            })[Object.keys({
-              circle: 0, square: 1, triangle: 2, pentagon: 3,
-              hexagon: 4, octagon: 5, star: 6, cross: 7,
-              'l-shape': 8, 't-shape': 9, 'h-shape': 10
-            }).indexOf(towerParams.floorShape)] || 0,
-            taperingType: Object.values({
-              none: 0, linear: 1, exponential: 2, 's-curve': 3, setback: 4
-            })[Object.keys({
-              none: 0, linear: 1, exponential: 2, 's-curve': 3, setback: 4
-            }).indexOf(towerParams.taperingMode)] || 1,
-            twistingType: Object.values({
-              none: 0, uniform: 1, accelerating: 2, sine: 3
-            })[Object.keys({
-              none: 0, uniform: 1, accelerating: 2, sine: 3
-            }).indexOf(towerParams.twistingMode)] || 0
+            shapeType: shapeMap[towerParams.floorShape] ?? 1,  // Default to square
+            taperingType: taperingMap[towerParams.taperingMode] ?? 1,  // Default to linear
+            twistingType: twistingMap[towerParams.twistingMode] ?? 0,  // Default to none
+            balconyDepth: towerParams.balconyDepth ?? 0.0,
+            balconyRatio: towerParams.balconyRatio ?? 0.0,
+            windowSize: towerParams.windowSize ?? 0.5,
+            facadeType: facadeMap[towerParams.facadeType] ?? 0  // Default to grid
           };
+
+          (renderer as any).towerParams = updatedParams;
+          console.log('🔧 Tower params updated:', {
+            baseRadius: updatedParams.baseRadius,
+            height: updatedParams.height,
+            shape: `${towerParams.floorShape} -> ${updatedParams.shapeType}`,
+            tapering: `${towerParams.taperingMode} -> ${updatedParams.taperingType}`,
+            twisting: `${towerParams.twistingMode} -> ${updatedParams.twistingType}`
+          });
 
           // Update formula display with current parameters
           updateFormula(9);
+
+          // Update building statistics
+          updateBuildingStats();
         };
+
+        // Building Statistics Display (updated in real-time)
+        const statsDisplay = {
+          totalArea: '0 m²',
+          avgFloorArea: '0 m²',
+          volume: '0 m³',
+          floorAreaRatio: '0',
+        };
+
+        const updateBuildingStats = () => {
+          import('../generators/parametric-tower').then(({ calculateBuildingStats }) => {
+            const stats = calculateBuildingStats(towerParams);
+            statsDisplay.totalArea = `${stats.grossFloorArea.toFixed(1)} m²`;
+            statsDisplay.avgFloorArea = `${stats.averageFloorArea.toFixed(1)} m²`;
+            statsDisplay.volume = `${stats.buildingVolume.toFixed(1)} m³`;
+            statsDisplay.floorAreaRatio = `${stats.floorAreaRatio.toFixed(2)}`;
+
+            // Update controllers display
+            if (statsFolder) {
+              statsFolder.controllersRecursive().forEach((c: any) => c.updateDisplay());
+            }
+          });
+        };
+
+        // Statistics Folder
+        const statsFolder = archFolder.addFolder('📊 Building Statistics');
+        statsFolder.add(statsDisplay, 'totalArea').name('延床面積 (GFA)').listen().disable();
+        statsFolder.add(statsDisplay, 'avgFloorArea').name('平均階面積').listen().disable();
+        statsFolder.add(statsDisplay, 'volume').name('建物容積').listen().disable();
+        statsFolder.add(statsDisplay, 'floorAreaRatio').name('容積率 (FAR)').listen().disable();
+        statsFolder.open();
 
         // Basic Dimensions
         const dimFolder = archFolder.addFolder('📏 Dimensions');
-        dimFolder.add(towerParams, 'baseRadius', 10, 50, 1).name('Base Radius (m)').onChange(updateTowerRealtime);
-        dimFolder.add(towerParams, 'height', 50, 500, 10).name('Height (m)').onChange(updateTowerRealtime);
-        dimFolder.add(towerParams, 'floorCount', 10, 100, 1).name('Floor Count').onChange(updateTowerRealtime);
-        dimFolder.add(towerParams, 'floorHeight', 2.5, 5.0, 0.1).name('Floor Height (m)').onChange(updateTowerRealtime);
+
+        // 数値入力用のラッパーオブジェクト
+        const dimInputs = {
+          baseRadiusInput: towerParams.baseRadius.toFixed(2),
+          topRadiusInput: towerParams.topRadius.toFixed(2),
+          heightInput: towerParams.height.toFixed(1),
+          floorCountInput: towerParams.floorCount.toString(),
+          floorHeightInput: towerParams.floorHeight.toFixed(3),
+        };
+
+        // Base Radius (数値入力 + スライダー)
+        dimFolder.add(dimInputs, 'baseRadiusInput').name('基準階半径 (m)').onChange((v: string) => {
+          const num = parseFloat(v);
+          if (!isNaN(num) && num >= 0.3 && num <= 2.0) {
+            towerParams.baseRadius = num;
+            updateTowerRealtime();
+          }
+        });
+        dimFolder.add(towerParams, 'baseRadius', 0.3, 2.0, 0.05).name('▸ Radius Slider').onChange((v: number) => {
+          dimInputs.baseRadiusInput = v.toFixed(2);
+          updateTowerRealtime();
+        });
+
+        // Top Radius
+        dimFolder.add(dimInputs, 'topRadiusInput').name('頂部半径 (m)').onChange((v: string) => {
+          const num = parseFloat(v);
+          if (!isNaN(num) && num >= 0.2 && num <= 2.0) {
+            towerParams.topRadius = num;
+            updateTowerRealtime();
+          }
+        });
+        dimFolder.add(towerParams, 'topRadius', 0.2, 2.0, 0.05).name('▸ Top Slider').onChange((v: number) => {
+          dimInputs.topRadiusInput = v.toFixed(2);
+          updateTowerRealtime();
+        });
+
+        // Height
+        dimFolder.add(dimInputs, 'heightInput').name('建物高さ (m)').onChange((v: string) => {
+          const num = parseFloat(v);
+          if (!isNaN(num) && num >= 2.0 && num <= 15.0) {
+            towerParams.height = num;
+            updateTowerRealtime();
+          }
+        });
+        dimFolder.add(towerParams, 'height', 2.0, 15.0, 0.5).name('▸ Height Slider').onChange((v: number) => {
+          dimInputs.heightInput = v.toFixed(1);
+          updateTowerRealtime();
+        });
+
+        // Floor Count
+        dimFolder.add(dimInputs, 'floorCountInput').name('階数').onChange((v: string) => {
+          const num = parseInt(v);
+          if (!isNaN(num) && num >= 10 && num <= 100) {
+            towerParams.floorCount = num;
+            towerParams.floorHeight = towerParams.height / num; // 自動計算
+            dimInputs.floorHeightInput = towerParams.floorHeight.toFixed(3);
+            updateTowerRealtime();
+          }
+        });
+        dimFolder.add(towerParams, 'floorCount', 10, 100, 1).name('▸ Floors Slider').onChange((v: number) => {
+          dimInputs.floorCountInput = v.toString();
+          towerParams.floorHeight = towerParams.height / v; // 自動計算
+          dimInputs.floorHeightInput = towerParams.floorHeight.toFixed(3);
+          updateTowerRealtime();
+        });
+
+        // Floor Height (階高)
+        dimFolder.add(dimInputs, 'floorHeightInput').name('階高 (m)').onChange((v: string) => {
+          const num = parseFloat(v);
+          if (!isNaN(num) && num >= 0.05 && num <= 0.3) {
+            towerParams.floorHeight = num;
+            towerParams.floorCount = Math.round(towerParams.height / num); // 自動計算
+            dimInputs.floorCountInput = towerParams.floorCount.toString();
+            updateTowerRealtime();
+          }
+        });
+        dimFolder.add(towerParams, 'floorHeight', 0.05, 0.3, 0.005).name('▸ Floor H Slider').onChange((v: number) => {
+          dimInputs.floorHeightInput = v.toFixed(3);
+          towerParams.floorCount = Math.round(towerParams.height / v); // 自動計算
+          dimInputs.floorCountInput = towerParams.floorCount.toString();
+          updateTowerRealtime();
+        });
 
         // Floor Shape
         const shapeFolder = archFolder.addFolder('🔷 Floor Shape');
@@ -2195,7 +2403,7 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
           updateTowerRealtime();
         });
         taperingFolder.add(towerParams, 'taperingAmount', 0, 1, 0.05).name('Amount').onChange(updateTowerRealtime);
-        taperingFolder.add(towerParams, 'topRadius', 5, 50, 1).name('Top Radius (m)').onChange(updateTowerRealtime);
+        taperingFolder.add(towerParams, 'topRadius', 0.2, 2.0, 0.05).name('Top Radius').onChange(updateTowerRealtime);
 
         // Twisting
         const twistingFolder = archFolder.addFolder('🌀 Twisting');
@@ -2219,23 +2427,44 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
 
         // Facade
         const facadeFolder = archFolder.addFolder('🏢 Facade');
-        facadeFolder.add(towerParams, 'facadeGridX', 1, 10, 0.5).name('Grid X (m)').onChange(updateTowerRealtime);
-        facadeFolder.add(towerParams, 'facadeGridZ', 1, 10, 0.5).name('Grid Z (m)').onChange(updateTowerRealtime);
-        facadeFolder.add(towerParams, 'panelDepth', 0, 0.5, 0.05).name('Panel Depth (m)').onChange(updateTowerRealtime);
-        facadeFolder.add(towerParams, 'balconyRatio', 0, 0.3, 0.05).name('Balcony Ratio').onChange(updateTowerRealtime);
+        const facadeTypeOptions = {
+          'Grid (Office)': 'grid',
+          'Curtain Wall (Modern)': 'curtain-wall',
+          'Panels (Concrete)': 'panels'
+        };
+        facadeFolder.add({ value: towerParams.facadeType }, 'value', facadeTypeOptions).name('Type').onChange((v: string) => {
+          towerParams.facadeType = v as any;
+          updateTowerRealtime();
+        });
+        facadeFolder.add(towerParams, 'windowSize', 0, 1.0, 0.05).name('Window Size').onChange(updateTowerRealtime);
+        facadeFolder.add(towerParams, 'balconyRatio', 0, 1.0, 0.05).name('Balcony Ratio').onChange(updateTowerRealtime);
+        facadeFolder.add(towerParams, 'balconyDepth', 0, 0.2, 0.01).name('Balcony Depth').onChange(updateTowerRealtime);
+        facadeFolder.add(towerParams, 'panelDepth', 0, 0.1, 0.01).name('Panel Detail').onChange(updateTowerRealtime);
 
         // Helper function to update UI and camera
         const applyPresetWithCamera = (height: number) => {
-          updateTowerRealtime();
-          [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
-            folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
-          });
           const renderer = (window as any).renderer;
           if (renderer) {
+            // Switch to Tower mode (mode 9)
+            renderer.params.mode = 9;
+
+            // Update tower parameters
+            updateTowerRealtime();
+
+            // Update UI controllers
+            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
+              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
+            });
+
+            // Set optimal camera
             renderer.orbitDistance = height * 0.8;
             renderer.orbitPitch = 0.3;
             renderer.orbitYaw = 0.5;
-            renderer.updateOrbitCamera();
+            if (renderer.updateOrbitCamera) {
+              renderer.updateOrbitCamera();
+            }
+
+            console.log(`✅ Tower preset applied: mode=${renderer.params.mode}, height=${height}`);
           }
         };
 
@@ -2243,64 +2472,84 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
         const presetsFolder = archFolder.addFolder('🏛️ Building Presets');
         const presets = {
           'Residential Tower': () => {
-            towerParams.baseRadius = 15;
-            towerParams.topRadius = 15;
-            towerParams.height = 200;
-            towerParams.floorCount = 60;
-            towerParams.floorHeight = 3.0;
+            towerParams.baseRadius = 0.7;
+            towerParams.topRadius = 0.7;
+            towerParams.height = 4.0;
+            towerParams.floorCount = 35;
+            towerParams.floorHeight = 0.114;
             towerParams.floorShape = FloorShape.SQUARE;
             towerParams.taperingMode = TaperingMode.NONE;
             towerParams.twistingMode = TwistingMode.NONE;
             towerParams.twistAngle = 0;
-            applyPresetWithCamera(200);
+            towerParams.facadeType = 'grid';
+            towerParams.balconyRatio = 0.6;  // 60% - バルコニー多め!
+            towerParams.balconyDepth = 0.12;
+            towerParams.windowSize = 0.6;
+            applyPresetWithCamera(4.0);
           },
           'Office Tower': () => {
-            towerParams.baseRadius = 25;
-            towerParams.topRadius = 20;
-            towerParams.height = 250;
-            towerParams.floorCount = 60;
-            towerParams.floorHeight = 4.0;
+            towerParams.baseRadius = 1.0;
+            towerParams.topRadius = 0.8;
+            towerParams.height = 6.0;
+            towerParams.floorCount = 50;
+            towerParams.floorHeight = 0.12;
             towerParams.floorShape = FloorShape.OCTAGON;
             towerParams.taperingMode = TaperingMode.LINEAR;
             towerParams.twistingMode = TwistingMode.UNIFORM;
             towerParams.twistAngle = 45;
-            applyPresetWithCamera(250);
+            towerParams.facadeType = 'curtain-wall';  // カーテンウォール!
+            towerParams.balconyRatio = 0.0;  // オフィスビルはバルコニーなし
+            towerParams.balconyDepth = 0.0;
+            towerParams.windowSize = 0.8;
+            applyPresetWithCamera(6.0);
           },
           'Mixed-Use Tower': () => {
-            towerParams.baseRadius = 30;
-            towerParams.topRadius = 18;
-            towerParams.height = 300;
-            towerParams.floorCount = 75;
-            towerParams.floorHeight = 4.0;
+            towerParams.baseRadius = 1.2;
+            towerParams.topRadius = 0.7;
+            towerParams.height = 7.0;
+            towerParams.floorCount = 60;
+            towerParams.floorHeight = 0.117;
             towerParams.floorShape = FloorShape.HEXAGON;
             towerParams.taperingMode = TaperingMode.S_CURVE;
             towerParams.twistingMode = TwistingMode.SINE;
             towerParams.twistAngle = 90;
-            applyPresetWithCamera(300);
+            towerParams.facadeType = 'curtain-wall';  // モダンなカーテンウォール
+            towerParams.balconyRatio = 0.3;  // 下層はレジデンス向けにバルコニー
+            towerParams.balconyDepth = 0.1;
+            towerParams.windowSize = 0.7;
+            applyPresetWithCamera(7.0);
           },
           'Iconic Landmark': () => {
-            towerParams.baseRadius = 35;
-            towerParams.topRadius = 8;
-            towerParams.height = 400;
-            towerParams.floorCount = 100;
-            towerParams.floorHeight = 4.0;
+            towerParams.baseRadius = 1.4;
+            towerParams.topRadius = 0.3;
+            towerParams.height = 9.0;
+            towerParams.floorCount = 80;
+            towerParams.floorHeight = 0.113;
             towerParams.floorShape = FloorShape.STAR;
             towerParams.taperingMode = TaperingMode.EXPONENTIAL;
             towerParams.twistingMode = TwistingMode.ACCELERATING;
             towerParams.twistAngle = 180;
-            applyPresetWithCamera(400);
+            towerParams.facadeType = 'curtain-wall';  // 象徴的なガラス張り
+            towerParams.balconyRatio = 0.15;  // 特徴的なバルコニー
+            towerParams.balconyDepth = 0.15;
+            towerParams.windowSize = 0.9;
+            applyPresetWithCamera(9.0);
           },
           'Modern Skyscraper': () => {
-            towerParams.baseRadius = 28;
-            towerParams.topRadius = 22;
-            towerParams.height = 350;
-            towerParams.floorCount = 85;
-            towerParams.floorHeight = 4.0;
+            towerParams.baseRadius = 1.1;
+            towerParams.topRadius = 0.9;
+            towerParams.height = 8.0;
+            towerParams.floorCount = 70;
+            towerParams.floorHeight = 0.114;
             towerParams.floorShape = FloorShape.CROSS;
             towerParams.taperingMode = TaperingMode.SETBACK;
             towerParams.twistingMode = TwistingMode.UNIFORM;
             towerParams.twistAngle = 30;
-            applyPresetWithCamera(350);
+            towerParams.facadeType = 'panels';  // パネル型
+            towerParams.balconyRatio = 0.2;
+            towerParams.balconyDepth = 0.08;
+            towerParams.windowSize = 0.5;
+            applyPresetWithCamera(8.0);
           }
         };
 
@@ -2395,12 +2644,31 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
         archFolder.add(generateBtn, 'generate').name('🔨 Generate Tower');
 
         archFolder.open();
+
+        // Apply default tower immediately
+        setTimeout(() => {
+          updateTowerRealtime();
+          console.log('✅ Default tower parameters applied');
+        }, 100);
       });
+    } else {
+      // Folder already exists, make sure tower mode is active
+      const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (renderer && renderer.params.mode !== 9) {
+        renderer.params.mode = 9;
+        console.log('✅ Re-activated Tower mode (9)');
+      }
     }
 
   } else {
     // Fractal Mode: Show fractal parameters
     console.log('🌀 Switching to Fractal Mode GUI');
+
+    // Disable architecture camera mode
+    const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+    if (renderer && (renderer as any).setArchitectureMode) {
+      (renderer as any).setArchitectureMode(false);
+    }
 
     // Hide architecture folders
     folders.forEach((folder: any) => {
@@ -2409,10 +2677,28 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
       }
     });
 
-    // Show fractal folders
+    // Show fractal-specific folders
+    const fractalFolderNames = [
+      'Fractal Parameters',
+      'Deformations',
+      'Flower of Life',
+      'Fibonacci Shell',
+      'Mandelbox',
+      'Metatron Cube',
+      'Gyroid Cathedral',
+      'Typhoon',
+      'Quaternion Julia',
+      'Cosmic Bloom',
+      'Shape Presets'
+    ];
+
     folders.forEach((folder: any) => {
-      if (folder._title && !folder._title.includes('Parametric Tower')) {
-        folder.show();
+      if (folder._title) {
+        // Show fractal-specific folders
+        const shouldShow = fractalFolderNames.some(name => folder._title.includes(name));
+        if (shouldShow) {
+          folder.show();
+        }
       }
     });
   }

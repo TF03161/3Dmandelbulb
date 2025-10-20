@@ -8,6 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest --coverage",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "gltf-to-ifc": "tsx tools/gltf-to-ifc.ts"
@@ -24,6 +26,7 @@
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "eslint": "^8.54.0",
+    "terser": "^5.44.0",
     "three": "^0.180.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.6",

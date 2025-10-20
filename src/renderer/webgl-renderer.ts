@@ -186,6 +186,13 @@ class WebGLRenderer {
   private orbitTheta: number = Math.PI * 0.5; // Vertical angle (latitude)
   private orbitPhi: number = 0; // Horizontal angle (longitude)
 
+  // Architecture mode: Building sits on ground, camera orbits at eye level
+  private isArchitectureMode: boolean = false;
+  private archOrbitTarget: Float32Array = vec3.fromValues(0, 2.5, 0); // Mid-height of tower
+  private archOrbitDistance: number = 6.0; // Distance from building
+  private archOrbitTheta: number = Math.PI * 0.45; // Eye level (slightly above horizontal)
+  private archOrbitPhi: number = 0; // Horizontal rotation around building
+
   // Mouse interaction
   private mouseDown: boolean = false;
   private lastMouseX: number = 0;
@@ -429,7 +436,11 @@ class WebGLRenderer {
       uTowerTwist: gl.getUniformLocation(this.program, 'uTowerTwist'),
       uTowerShapeType: gl.getUniformLocation(this.program, 'uTowerShapeType'),
       uTowerTaperingType: gl.getUniformLocation(this.program, 'uTowerTaperingType'),
-      uTowerTwistingType: gl.getUniformLocation(this.program, 'uTowerTwistingType')
+      uTowerTwistingType: gl.getUniformLocation(this.program, 'uTowerTwistingType'),
+      uTowerBalconyDepth: gl.getUniformLocation(this.program, 'uTowerBalconyDepth'),
+      uTowerBalconyRatio: gl.getUniformLocation(this.program, 'uTowerBalconyRatio'),
+      uTowerWindowSize: gl.getUniformLocation(this.program, 'uTowerWindowSize'),
+      uTowerFacadeType: gl.getUniformLocation(this.program, 'uTowerFacadeType')
     };
   }
 
@@ -497,12 +508,21 @@ class WebGLRenderer {
       const deltaX = e.clientX - this.lastMouseX;
       const deltaY = e.clientY - this.lastMouseY;
 
-      // Update orbit angles (rotate camera around object)
-      this.orbitPhi -= deltaX * 0.005; // Horizontal rotation
-      this.orbitTheta -= deltaY * 0.005; // Vertical rotation
+      if (this.isArchitectureMode) {
+        // Architecture mode: Horizontal rotation only (walk around building)
+        this.archOrbitPhi -= deltaX * 0.005; // Horizontal rotation
+        this.archOrbitTheta -= deltaY * 0.003; // Slight vertical angle adjustment
 
-      // Clamp theta to prevent flipping
-      this.orbitTheta = Math.max(0.1, Math.min(Math.PI - 0.1, this.orbitTheta));
+        // Clamp vertical angle to stay near eye level (ground-based viewing)
+        this.archOrbitTheta = Math.max(Math.PI * 0.3, Math.min(Math.PI * 0.6, this.archOrbitTheta));
+      } else {
+        // Fractal mode: Full spherical rotation
+        this.orbitPhi -= deltaX * 0.005; // Horizontal rotation
+        this.orbitTheta -= deltaY * 0.005; // Vertical rotation
+
+        // Clamp theta to prevent flipping
+        this.orbitTheta = Math.max(0.1, Math.min(Math.PI - 0.1, this.orbitTheta));
+      }
 
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
@@ -529,21 +549,45 @@ class WebGLRenderer {
       }
 
       // Apply zoom with very small increment
-      this.orbitDistance += delta * 0.05; // Very conservative multiplier
-      this.orbitDistance = Math.max(1.5, Math.min(20, this.orbitDistance));
+      if (this.isArchitectureMode) {
+        this.archOrbitDistance += delta * 0.05;
+        this.archOrbitDistance = Math.max(3.0, Math.min(15, this.archOrbitDistance));
+      } else {
+        this.orbitDistance += delta * 0.05;
+        this.orbitDistance = Math.max(1.5, Math.min(20, this.orbitDistance));
+      }
       this.updateOrbitCamera();
     });
   }
 
   private updateOrbitCamera(): void {
-    // Calculate camera position in spherical coordinates around target
-    const x = this.orbitDistance * Math.sin(this.orbitTheta) * Math.sin(this.orbitPhi);
-    const y = this.orbitDistance * Math.cos(this.orbitTheta);
-    const z = this.orbitDistance * Math.sin(this.orbitTheta) * Math.cos(this.orbitPhi);
+    let targetPos: Float32Array;
+    let distance: number;
+    let theta: number;
+    let phi: number;
 
-    this.camPos[0] = this.orbitTarget[0] + x;
-    this.camPos[1] = this.orbitTarget[1] + y;
-    this.camPos[2] = this.orbitTarget[2] + z;
+    if (this.isArchitectureMode) {
+      // Architecture mode: Camera orbits at eye level around building on ground
+      targetPos = this.archOrbitTarget;
+      distance = this.archOrbitDistance;
+      theta = this.archOrbitTheta;
+      phi = this.archOrbitPhi;
+    } else {
+      // Fractal mode: Standard orbit around center
+      targetPos = this.orbitTarget;
+      distance = this.orbitDistance;
+      theta = this.orbitTheta;
+      phi = this.orbitPhi;
+    }
+
+    // Calculate camera position in spherical coordinates around target
+    const x = distance * Math.sin(theta) * Math.sin(phi);
+    const y = distance * Math.cos(theta);
+    const z = distance * Math.sin(theta) * Math.cos(phi);
+
+    this.camPos[0] = targetPos[0] + x;
+    this.camPos[1] = targetPos[1] + y;
+    this.camPos[2] = targetPos[2] + z;
 
     // Debug logging (comment out for performance)
     // console.log('Camera update:', {
@@ -556,7 +600,7 @@ class WebGLRenderer {
     // Calculate look-at rotation matrix
     // Forward vector (camera -> target)
     const forward = vec3.create();
-    vec3.subtract(forward, this.orbitTarget, this.camPos);
+    vec3.subtract(forward, targetPos, this.camPos);
     vec3.normalize(forward, forward);
 
     // Right vector (perpendicular to forward and world up)
@@ -587,6 +631,42 @@ class WebGLRenderer {
     this.camRot[6] = right[2];
     this.camRot[7] = up[2];
     this.camRot[8] = forward[2];
+  }
+
+  /**
+   * Enable/disable architecture mode
+   * In architecture mode, building sits on ground and camera orbits at eye level
+   */
+  public setArchitectureMode(enabled: boolean, towerHeight?: number): void {
+    this.isArchitectureMode = enabled;
+
+    if (enabled) {
+      const height = towerHeight || 5.0;
+
+      // Strategy: Use wide FOV and moderate distance
+      // Target point: center of building
+      const targetHeight = height * 0.5;
+      this.archOrbitTarget = vec3.fromValues(0, targetHeight, 0);
+
+      // Set moderate distance that works within raymarch limits (t < 20.0)
+      // Distance should be less than 20 to ensure rays reach the building
+      this.archOrbitDistance = Math.min(height * 3.0, 15.0);
+
+      // Set camera angle for 3/4 view
+      this.archOrbitTheta = Math.PI * 0.35; // ~63 degrees from vertical
+      this.archOrbitPhi = 0; // Start facing front
+
+      // Widen FOV for architecture mode to capture full building
+      this.fov = 75; // Wide angle view (was 45)
+
+      console.log(`🏗️ Architecture Mode: ON (height: ${height}, target: ${targetHeight}, distance: ${this.archOrbitDistance}, FOV: ${this.fov}°)`);
+    } else {
+      // Restore normal FOV for fractal mode
+      this.fov = 45;
+      console.log('🌀 Architecture Mode: OFF (Fractal mode)');
+    }
+
+    this.updateOrbitCamera();
   }
 
   private resize(): void {
@@ -825,19 +905,38 @@ class WebGLRenderer {
 
     // Parametric Tower uniforms
     const towerParams = (this as any).towerParams || {
-      baseRadius: 20, topRadius: 14, height: 150, floorCount: 50,
-      floorHeight: 3.0, twistAngle: 0, shapeType: 0,
-      taperingType: 1, twistingType: 0
+      baseRadius: 0.8, topRadius: 0.6, height: 5.0, floorCount: 40,
+      floorHeight: 0.125, twistAngle: 0, shapeType: 1,
+      taperingType: 1, twistingType: 0,
+      balconyDepth: 0.0, balconyRatio: 0.0, windowSize: 0.5, facadeType: 0
     };
-    gl.uniform1f(uniforms.uTowerBaseRadius, towerParams.baseRadius);
-    gl.uniform1f(uniforms.uTowerTopRadius, towerParams.topRadius);
-    gl.uniform1f(uniforms.uTowerHeight, towerParams.height);
-    gl.uniform1f(uniforms.uTowerFloorCount, towerParams.floorCount);
-    gl.uniform1f(uniforms.uTowerFloorHeight, towerParams.floorHeight);
-    gl.uniform1f(uniforms.uTowerTwist, towerParams.twistAngle);
-    gl.uniform1i(uniforms.uTowerShapeType, towerParams.shapeType);
-    gl.uniform1i(uniforms.uTowerTaperingType, towerParams.taperingType);
-    gl.uniform1i(uniforms.uTowerTwistingType, towerParams.twistingType);
+
+    // Log tower parameters when in tower mode for debugging
+    if (params.mode === 9 && Math.random() < 0.02) { // Log 2% of frames
+      console.log('🏗️ Renderer tower params:', {
+        baseRadius: towerParams.baseRadius,
+        topRadius: towerParams.topRadius,
+        height: towerParams.height,
+        shapeType: towerParams.shapeType,
+        taperingType: towerParams.taperingType,
+        twistingType: towerParams.twistingType,
+        twistAngle: towerParams.twistAngle
+      });
+    }
+
+    if (uniforms.uTowerBaseRadius) gl.uniform1f(uniforms.uTowerBaseRadius, towerParams.baseRadius);
+    if (uniforms.uTowerTopRadius) gl.uniform1f(uniforms.uTowerTopRadius, towerParams.topRadius);
+    if (uniforms.uTowerHeight) gl.uniform1f(uniforms.uTowerHeight, towerParams.height);
+    if (uniforms.uTowerFloorCount) gl.uniform1f(uniforms.uTowerFloorCount, towerParams.floorCount);
+    if (uniforms.uTowerFloorHeight) gl.uniform1f(uniforms.uTowerFloorHeight, towerParams.floorHeight);
+    if (uniforms.uTowerTwist) gl.uniform1f(uniforms.uTowerTwist, towerParams.twistAngle);
+    if (uniforms.uTowerShapeType) gl.uniform1i(uniforms.uTowerShapeType, towerParams.shapeType);
+    if (uniforms.uTowerTaperingType) gl.uniform1i(uniforms.uTowerTaperingType, towerParams.taperingType);
+    if (uniforms.uTowerTwistingType) gl.uniform1i(uniforms.uTowerTwistingType, towerParams.twistingType);
+    if (uniforms.uTowerBalconyDepth) gl.uniform1f(uniforms.uTowerBalconyDepth, towerParams.balconyDepth);
+    if (uniforms.uTowerBalconyRatio) gl.uniform1f(uniforms.uTowerBalconyRatio, towerParams.balconyRatio);
+    if (uniforms.uTowerWindowSize) gl.uniform1f(uniforms.uTowerWindowSize, towerParams.windowSize);
+    if (uniforms.uTowerFacadeType) gl.uniform1i(uniforms.uTowerFacadeType, towerParams.facadeType);
 
     // Draw fullscreen triangle
     gl.drawArrays(gl.TRIANGLES, 0, 3);

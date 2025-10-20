@@ -109,6 +109,10 @@ uniform float uTowerTwist;
 uniform int uTowerShapeType;
 uniform int uTowerTaperingType;
 uniform int uTowerTwistingType;
+uniform float uTowerBalconyDepth;    // バルコニーの深さ (0.0-0.2)
+uniform float uTowerBalconyRatio;    // バルコニーの頻度 (0.0-1.0)
+uniform float uTowerWindowSize;      // 窓のサイズ (0.0-1.0)
+uniform int uTowerFacadeType;        // ファサードタイプ (0=grid, 1=curtain wall, 2=panels)
 
 vec3 monoBg = vec3(0.0); // Pure black background
 const float PI = 3.14159265358979323846;
@@ -691,6 +695,7 @@ float gyroidCathedralDE(vec3 p, out vec4 orbitTrap) {
     q = repeatAround(q, period);
   }
 
+  // Gyroid minimal surface equation with proper normalization
   float gyroidValue =
     sin(q.x) * cos(q.y) +
     sin(q.y) * cos(q.z) +
@@ -699,16 +704,23 @@ float gyroidCathedralDE(vec3 p, out vec4 orbitTrap) {
   float targetLevel = uGyroLevel;
   float dist = abs(gyroidValue - targetLevel);
 
-  float gradMag = length(vec3(
+  // Proper gradient calculation for accurate distance field
+  vec3 gradient = vec3(
     cos(q.x) * cos(q.y) - sin(q.z) * sin(q.x),
     -sin(q.x) * sin(q.y) + cos(q.y) * cos(q.z),
     -sin(q.y) * sin(q.z) + cos(q.z) * cos(q.x)
-  ));
+  );
 
-  float approxDist = dist / max(gradMag, 0.1);
+  float gradMag = length(gradient);
 
-  orbitTrap = vec4(abs(q), approxDist);
-  return approxDist * scale * 0.5;
+  // Improved distance approximation with safety clamping
+  float approxDist = dist / max(gradMag, 0.3);
+
+  // Scale back to world space with proper multiplier
+  float finalDist = approxDist * scale * 0.4;
+
+  orbitTrap = vec4(abs(q), finalDist);
+  return finalDist;
 }
 
 // Mandelbulb distance estimator
@@ -1017,21 +1029,70 @@ float parametricTowerDE(vec3 p, out vec4 trap) {
     shapeDist = dist2D - radius;
   }
 
-  // Add floor detail (horizontal bands)
-  float floorBands = sin(y / max(uTowerFloorHeight, 1e-3) * TAU) * 0.08;
-  shapeDist -= floorBands;
+  // ファサードディテール
+  float facadeDetail = 0.0;
+  float floorLevel = y / max(uTowerFloorHeight, 1e-3);
+  float floorFract = fract(floorLevel);
 
-  // Add window pattern (vertical stripes)
-  float windowPattern = sin(angle * (8.0 + float(uTowerShapeType) * 2.0)) * 0.03;
-  shapeDist -= windowPattern;
+  if (uTowerFacadeType == 0) {
+    // グリッド型ファサード (従来型オフィスビル)
+    float windowGridX = sin(angle * 16.0) * 0.02;
+    float windowGridY = sin(floorLevel * TAU) * 0.02;
+    facadeDetail = windowGridX + windowGridY;
 
-  // Add horizontal divisions every 5 floors
-  float floorDivisions = smoothstep(0.95, 1.0, fract(y / (max(uTowerFloorHeight, 1e-3) * 5.0))) * 0.15;
-  shapeDist += floorDivisions;
+    // 各階の床スラブ
+    float floorSlab = smoothstep(0.92, 0.98, floorFract) * 0.08;
+    facadeDetail += floorSlab;
 
-  // Add corner chamfering for non-circular shapes
+  } else if (uTowerFacadeType == 1) {
+    // カーテンウォール (ガラス張りモダンビル)
+    float glassGrid = sin(angle * 32.0) * sin(floorLevel * 4.0) * 0.015;
+    facadeDetail = glassGrid;
+
+    // 縦のマリオン(柱)
+    float mullions = smoothstep(0.95, 1.0, fract(angle * 8.0 / TAU)) * 0.03;
+    facadeDetail += mullions;
+
+  } else {
+    // パネル型ファサード (プレキャストコンクリート)
+    float panelX = step(0.5, fract(angle * 12.0 / TAU)) * 0.04;
+    float panelY = step(0.5, floorFract) * 0.04;
+    facadeDetail = panelX + panelY - 0.02;
+  }
+
+  shapeDist -= facadeDetail;
+
+  // バルコニー (レジデンス用)
+  if (uTowerBalconyDepth > 0.001 && uTowerBalconyRatio > 0.001) {
+    float floorIndex = floor(floorLevel);
+    float balconyHash = fract(sin(floorIndex * 78.233) * 43758.5453);
+
+    // バルコニーがある階かどうか
+    if (balconyHash < uTowerBalconyRatio && floorFract > 0.85) {
+      float balconyDepth = uTowerBalconyDepth;
+      float balconyHeight = uTowerFloorHeight * 0.15;
+
+      // バルコニーの張り出し (外側に出る)
+      float balconyDist = dist2D - (radius + balconyDepth);
+      float balconyY = abs(y - (floorIndex + 0.92) * uTowerFloorHeight) - balconyHeight;
+      float balconyBox = max(balconyDist, balconyY);
+
+      // 手すり
+      float railingDist = abs(dist2D - (radius + balconyDepth - 0.02)) - 0.01;
+      float railingY = abs(y - (floorIndex + 1.0) * uTowerFloorHeight) - balconyHeight * 0.5;
+      float railing = max(railingDist, railingY);
+
+      shapeDist = min(shapeDist, min(balconyBox, railing));
+    }
+  }
+
+  // 大きな構造分割 (5階ごと)
+  float structuralDivision = smoothstep(0.95, 1.0, fract(floorLevel / 5.0)) * 0.12;
+  shapeDist += structuralDivision;
+
+  // コーナーディテール
   if (uTowerShapeType > 0) {
-    float cornerDetail = smoothstep(0.9, 1.0, dist2D / max(radius, 1e-3)) * 0.05;
+    float cornerDetail = smoothstep(0.92, 1.0, dist2D / max(radius, 1e-3)) * 0.04;
     shapeDist += cornerDetail;
   }
 

@@ -19,7 +19,12 @@ const EXTENSION_ERROR_PATTERNS = [
   '.well-known',
   'chrome.devtools',
   'chrome-extension://',
-  'moz-extension://'
+  'moz-extension://',
+  'metamask',
+  'could not establish connection',
+  'receiving end does not exist',
+  'failed to connect to metamask',
+  'metamask extension not found'
 ];
 
 // 元のコンソールメソッドを保存
