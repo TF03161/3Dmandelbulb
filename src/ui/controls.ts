@@ -2172,9 +2172,6 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
       archFolder.open(); // Open by default
       folders.push(archFolder);
 
-      // Add Advanced Facade Design controls
-      addFacadeDesignControls(archFolder);
-
       // Import tower generator and populate folder
       import('../generators/parametric-tower').then(({ FloorShape, TaperingMode, TwistingMode, DEFAULT_TOWER_PARAMS }) => {
         const towerParams = { ...DEFAULT_TOWER_PARAMS };
@@ -2295,6 +2292,9 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
         statsFolder.add(statsDisplay, 'volume').name('建物容積').listen().disable();
         statsFolder.add(statsDisplay, 'floorAreaRatio').name('容積率 (FAR)').listen().disable();
         statsFolder.open();
+
+        // Add Advanced Facade Design controls with update callback
+        addFacadeDesignControls(archFolder, updateTowerRealtime);
 
         // Basic Dimensions
         const dimFolder = archFolder.addFolder('📏 Dimensions');
