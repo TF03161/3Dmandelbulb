@@ -6,6 +6,7 @@
 import GUI from 'lil-gui';
 import { modeManager } from '../modes/mode-manager';
 import { AppMode, MODE_CONFIGS } from '../modes/mode-types';
+import { addFacadeDesignControls } from './facade-controls';
 
 interface RendererWithParams {
   params: {
@@ -2171,6 +2172,9 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
       archFolder.open(); // Open by default
       folders.push(archFolder);
 
+      // Add Advanced Facade Design controls
+      addFacadeDesignControls(archFolder);
+
       // Import tower generator and populate folder
       import('../generators/parametric-tower').then(({ FloorShape, TaperingMode, TwistingMode, DEFAULT_TOWER_PARAMS }) => {
         const towerParams = { ...DEFAULT_TOWER_PARAMS };
@@ -2232,7 +2236,17 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
             balconyDepth: towerParams.balconyDepth ?? 0.0,
             balconyRatio: towerParams.balconyRatio ?? 0.0,
             windowSize: towerParams.windowSize ?? 0.5,
-            facadeType: facadeMap[towerParams.facadeType] ?? 0  // Default to grid
+            facadeType: facadeMap[towerParams.facadeType] ?? 0,  // Default to grid
+            // Additional parameters
+            shapeComplexity: towerParams.shapeComplexity ?? 16,
+            cornerRadius: towerParams.cornerRadius ?? 0.1,
+            twistLevels: towerParams.twistLevels ?? 10,
+            floorVariation: towerParams.floorVariation ?? 0,
+            asymmetry: towerParams.asymmetry ?? 0,
+            facadeGridX: towerParams.facadeGridX ?? 0.2,
+            facadeGridZ: towerParams.facadeGridZ ?? 0.2,
+            panelDepth: towerParams.panelDepth ?? 0.05,
+            taperingAmount: towerParams.taperingAmount ?? 0.3
           };
 
           (renderer as any).towerParams = updatedParams;

@@ -92,6 +92,19 @@ interface UniformLocations {
   uTowerShapeType: WebGLUniformLocation | null;
   uTowerTaperingType: WebGLUniformLocation | null;
   uTowerTwistingType: WebGLUniformLocation | null;
+  uTowerBalconyDepth: WebGLUniformLocation | null;
+  uTowerBalconyRatio: WebGLUniformLocation | null;
+  uTowerWindowSize: WebGLUniformLocation | null;
+  uTowerFacadeType: WebGLUniformLocation | null;
+  uTowerShapeComplexity: WebGLUniformLocation | null;
+  uTowerCornerRadius: WebGLUniformLocation | null;
+  uTowerTwistLevels: WebGLUniformLocation | null;
+  uTowerFloorVariation: WebGLUniformLocation | null;
+  uTowerAsymmetry: WebGLUniformLocation | null;
+  uTowerFacadeGridX: WebGLUniformLocation | null;
+  uTowerFacadeGridZ: WebGLUniformLocation | null;
+  uTowerPanelDepth: WebGLUniformLocation | null;
+  uTowerTaperingAmount: WebGLUniformLocation | null;
 }
 
 interface RenderParams {
@@ -440,7 +453,16 @@ class WebGLRenderer {
       uTowerBalconyDepth: gl.getUniformLocation(this.program, 'uTowerBalconyDepth'),
       uTowerBalconyRatio: gl.getUniformLocation(this.program, 'uTowerBalconyRatio'),
       uTowerWindowSize: gl.getUniformLocation(this.program, 'uTowerWindowSize'),
-      uTowerFacadeType: gl.getUniformLocation(this.program, 'uTowerFacadeType')
+      uTowerFacadeType: gl.getUniformLocation(this.program, 'uTowerFacadeType'),
+      uTowerShapeComplexity: gl.getUniformLocation(this.program, 'uTowerShapeComplexity'),
+      uTowerCornerRadius: gl.getUniformLocation(this.program, 'uTowerCornerRadius'),
+      uTowerTwistLevels: gl.getUniformLocation(this.program, 'uTowerTwistLevels'),
+      uTowerFloorVariation: gl.getUniformLocation(this.program, 'uTowerFloorVariation'),
+      uTowerAsymmetry: gl.getUniformLocation(this.program, 'uTowerAsymmetry'),
+      uTowerFacadeGridX: gl.getUniformLocation(this.program, 'uTowerFacadeGridX'),
+      uTowerFacadeGridZ: gl.getUniformLocation(this.program, 'uTowerFacadeGridZ'),
+      uTowerPanelDepth: gl.getUniformLocation(this.program, 'uTowerPanelDepth'),
+      uTowerTaperingAmount: gl.getUniformLocation(this.program, 'uTowerTaperingAmount')
     };
   }
 
@@ -908,7 +930,12 @@ class WebGLRenderer {
       baseRadius: 0.8, topRadius: 0.6, height: 5.0, floorCount: 40,
       floorHeight: 0.125, twistAngle: 0, shapeType: 1,
       taperingType: 1, twistingType: 0,
-      balconyDepth: 0.0, balconyRatio: 0.0, windowSize: 0.5, facadeType: 0
+      balconyDepth: 0.0, balconyRatio: 0.0, windowSize: 0.5, facadeType: 0,
+      // Additional parameters with defaults
+      shapeComplexity: 16, cornerRadius: 0.1, twistLevels: 10,
+      floorVariation: 0, asymmetry: 0,
+      facadeGridX: 0.2, facadeGridZ: 0.2, panelDepth: 0.05,
+      taperingAmount: 0.3
     };
 
     // Log tower parameters when in tower mode for debugging
@@ -920,10 +947,13 @@ class WebGLRenderer {
         shapeType: towerParams.shapeType,
         taperingType: towerParams.taperingType,
         twistingType: towerParams.twistingType,
-        twistAngle: towerParams.twistAngle
+        twistAngle: towerParams.twistAngle,
+        shapeComplexity: towerParams.shapeComplexity,
+        cornerRadius: towerParams.cornerRadius
       });
     }
 
+    // Basic parameters
     if (uniforms.uTowerBaseRadius) gl.uniform1f(uniforms.uTowerBaseRadius, towerParams.baseRadius);
     if (uniforms.uTowerTopRadius) gl.uniform1f(uniforms.uTowerTopRadius, towerParams.topRadius);
     if (uniforms.uTowerHeight) gl.uniform1f(uniforms.uTowerHeight, towerParams.height);
@@ -937,6 +967,17 @@ class WebGLRenderer {
     if (uniforms.uTowerBalconyRatio) gl.uniform1f(uniforms.uTowerBalconyRatio, towerParams.balconyRatio);
     if (uniforms.uTowerWindowSize) gl.uniform1f(uniforms.uTowerWindowSize, towerParams.windowSize);
     if (uniforms.uTowerFacadeType) gl.uniform1i(uniforms.uTowerFacadeType, towerParams.facadeType);
+
+    // Additional parameters
+    if (uniforms.uTowerShapeComplexity) gl.uniform1f(uniforms.uTowerShapeComplexity, towerParams.shapeComplexity);
+    if (uniforms.uTowerCornerRadius) gl.uniform1f(uniforms.uTowerCornerRadius, towerParams.cornerRadius);
+    if (uniforms.uTowerTwistLevels) gl.uniform1f(uniforms.uTowerTwistLevels, towerParams.twistLevels);
+    if (uniforms.uTowerFloorVariation) gl.uniform1f(uniforms.uTowerFloorVariation, towerParams.floorVariation);
+    if (uniforms.uTowerAsymmetry) gl.uniform1f(uniforms.uTowerAsymmetry, towerParams.asymmetry);
+    if (uniforms.uTowerFacadeGridX) gl.uniform1f(uniforms.uTowerFacadeGridX, towerParams.facadeGridX);
+    if (uniforms.uTowerFacadeGridZ) gl.uniform1f(uniforms.uTowerFacadeGridZ, towerParams.facadeGridZ);
+    if (uniforms.uTowerPanelDepth) gl.uniform1f(uniforms.uTowerPanelDepth, towerParams.panelDepth);
+    if (uniforms.uTowerTaperingAmount) gl.uniform1f(uniforms.uTowerTaperingAmount, towerParams.taperingAmount);
 
     // Draw fullscreen triangle
     gl.drawArrays(gl.TRIANGLES, 0, 3);

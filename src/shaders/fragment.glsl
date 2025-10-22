@@ -113,6 +113,16 @@ uniform float uTowerBalconyDepth;    // バルコニーの深さ (0.0-0.2)
 uniform float uTowerBalconyRatio;    // バルコニーの頻度 (0.0-1.0)
 uniform float uTowerWindowSize;      // 窓のサイズ (0.0-1.0)
 uniform int uTowerFacadeType;        // ファサードタイプ (0=grid, 1=curtain wall, 2=panels)
+// Additional Tower parameters
+uniform float uTowerShapeComplexity; // Shape detail level (3-32)
+uniform float uTowerCornerRadius;    // Corner rounding (0-1)
+uniform float uTowerTwistLevels;     // Twist segments (5-50)
+uniform float uTowerFloorVariation;  // Floor variation (0-0.5)
+uniform float uTowerAsymmetry;       // Asymmetry factor (0-1)
+uniform float uTowerFacadeGridX;     // Horizontal grid spacing
+uniform float uTowerFacadeGridZ;     // Vertical grid spacing
+uniform float uTowerPanelDepth;      // Panel depth variation
+uniform float uTowerTaperingAmount;  // Tapering amount (0-1)
 
 vec3 monoBg = vec3(0.0); // Pure black background
 const float PI = 3.14159265358979323846;
@@ -963,6 +973,19 @@ float parametricTowerDE(vec3 p, out vec4 trap) {
     radius = uTowerBaseRadius - (uTowerBaseRadius - uTowerTopRadius) * step;
   }
 
+  // Apply floor variation (per-floor randomness)
+  if (uTowerFloorVariation > 0.001) {
+    float floorIndex = floor(y / max(uTowerFloorHeight, 1e-3));
+    float variation = fract(sin(floorIndex * 78.233) * 43758.5453) - 0.5;
+    radius += variation * uTowerFloorVariation * radius;
+  }
+
+  // Apply asymmetry (directional variation)
+  if (uTowerAsymmetry > 0.001) {
+    float angleVar = atan(z, x);
+    radius += sin(angleVar * 2.0) * uTowerAsymmetry * radius * 0.2;
+  }
+
   // Calculate rotation with twisting
   float rotation = 0.0;
   if (uTowerTwistingType == 1) {
@@ -993,9 +1016,15 @@ float parametricTowerDE(vec3 p, out vec4 trap) {
     // Circle
     shapeDist = dist2D - radius;
   } else if (uTowerShapeType == 1) {
-    // Square
+    // Square with corner rounding
     float cornerDist = max(abs(rx), abs(rz));
-    shapeDist = cornerDist - radius;
+    // Apply corner rounding if enabled
+    if (uTowerCornerRadius > 0.001) {
+      vec2 q = abs(vec2(rx, rz)) - radius + uTowerCornerRadius * radius;
+      shapeDist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uTowerCornerRadius * radius;
+    } else {
+      shapeDist = cornerDist - radius;
+    }
   } else if (uTowerShapeType == 2) {
     // Triangle
     float a = mod(angle + PI, TAU / 3.0) - PI / 3.0;
@@ -1036,12 +1065,15 @@ float parametricTowerDE(vec3 p, out vec4 trap) {
 
   if (uTowerFacadeType == 0) {
     // グリッド型ファサード (従来型オフィスビル)
-    float windowGridX = sin(angle * 16.0) * 0.02;
-    float windowGridY = sin(floorLevel * TAU) * 0.02;
+    // Use facadeGridX and facadeGridZ parameters
+    float gridFreqX = 8.0 / max(uTowerFacadeGridX, 0.01); // Higher frequency for smaller grid
+    float gridFreqZ = 4.0 / max(uTowerFacadeGridZ, 0.01);
+    float windowGridX = sin(angle * gridFreqX) * uTowerPanelDepth;
+    float windowGridY = sin(floorLevel * gridFreqZ) * uTowerPanelDepth;
     facadeDetail = windowGridX + windowGridY;
 
     // 各階の床スラブ
-    float floorSlab = smoothstep(0.92, 0.98, floorFract) * 0.08;
+    float floorSlab = smoothstep(0.92, 0.98, floorFract) * uTowerPanelDepth * 1.5;
     facadeDetail += floorSlab;
 
   } else if (uTowerFacadeType == 1) {
