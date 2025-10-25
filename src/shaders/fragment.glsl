@@ -99,6 +99,31 @@ uniform float uCosExpansion;
 uniform float uCosRipple;
 uniform float uCosSpiral;
 
+// Parametric Tower parameters
+uniform float uTowerBaseRadius;
+uniform float uTowerTopRadius;
+uniform float uTowerHeight;
+uniform float uTowerFloorCount;
+uniform float uTowerFloorHeight;
+uniform float uTowerTwist;
+uniform int uTowerShapeType;
+uniform int uTowerTaperingType;
+uniform int uTowerTwistingType;
+uniform float uTowerBalconyDepth;    // バルコニーの深さ (0.0-0.2)
+uniform float uTowerBalconyRatio;    // バルコニーの頻度 (0.0-1.0)
+uniform float uTowerWindowSize;      // 窓のサイズ (0.0-1.0)
+uniform int uTowerFacadeType;        // ファサードタイプ (0=grid, 1=curtain wall, 2=panels)
+// Additional Tower parameters
+uniform float uTowerShapeComplexity; // Shape detail level (3-32)
+uniform float uTowerCornerRadius;    // Corner rounding (0-1)
+uniform float uTowerTwistLevels;     // Twist segments (5-50)
+uniform float uTowerFloorVariation;  // Floor variation (0-0.5)
+uniform float uTowerAsymmetry;       // Asymmetry factor (0-1)
+uniform float uTowerFacadeGridX;     // Horizontal grid spacing
+uniform float uTowerFacadeGridZ;     // Vertical grid spacing
+uniform float uTowerPanelDepth;      // Panel depth variation
+uniform float uTowerTaperingAmount;  // Tapering amount (0-1)
+
 vec3 monoBg = vec3(0.0); // Pure black background
 const float PI = 3.14159265358979323846;
 const float TAU = 6.28318530717958647692;
@@ -680,6 +705,7 @@ float gyroidCathedralDE(vec3 p, out vec4 orbitTrap) {
     q = repeatAround(q, period);
   }
 
+  // Gyroid minimal surface equation with proper normalization
   float gyroidValue =
     sin(q.x) * cos(q.y) +
     sin(q.y) * cos(q.z) +
@@ -688,16 +714,23 @@ float gyroidCathedralDE(vec3 p, out vec4 orbitTrap) {
   float targetLevel = uGyroLevel;
   float dist = abs(gyroidValue - targetLevel);
 
-  float gradMag = length(vec3(
+  // Proper gradient calculation for accurate distance field
+  vec3 gradient = vec3(
     cos(q.x) * cos(q.y) - sin(q.z) * sin(q.x),
     -sin(q.x) * sin(q.y) + cos(q.y) * cos(q.z),
     -sin(q.y) * sin(q.z) + cos(q.z) * cos(q.x)
-  ));
+  );
 
-  float approxDist = dist / max(gradMag, 0.1);
+  float gradMag = length(gradient);
 
-  orbitTrap = vec4(abs(q), approxDist);
-  return approxDist * scale * 0.5;
+  // Improved distance approximation with safety clamping
+  float approxDist = dist / max(gradMag, 0.3);
+
+  // Scale back to world space with proper multiplier
+  float finalDist = approxDist * scale * 0.4;
+
+  orbitTrap = vec4(abs(q), finalDist);
+  return finalDist;
 }
 
 // Mandelbulb distance estimator
@@ -900,6 +933,192 @@ float cosmicBloomDE(vec3 p, out vec4 orbitTrap) {
   return bloom;
 }
 
+// Parametric Tower SDF
+float parametricTowerDE(vec3 p, out vec4 trap) {
+  float x = p.x;
+  float y = p.y;
+  float z = p.z;
+
+  // Vertical bounds check
+  if (y < 0.0) {
+    trap = vec4(abs(p), -y + 10.0);
+    return -y + 10.0;
+  }
+  if (y > uTowerHeight) {
+    trap = vec4(abs(p), y - uTowerHeight + 10.0);
+    return y - uTowerHeight + 10.0;
+  }
+
+  // Calculate normalized height (0-1)
+  float t = y / max(uTowerHeight, 1e-3);
+
+  // Calculate radius with tapering
+  float radius;
+  if (uTowerTaperingType == 0) {
+    // None
+    radius = uTowerBaseRadius;
+  } else if (uTowerTaperingType == 1) {
+    // Linear
+    radius = uTowerBaseRadius - (uTowerBaseRadius - uTowerTopRadius) * t;
+  } else if (uTowerTaperingType == 2) {
+    // Exponential
+    radius = uTowerBaseRadius * pow(uTowerTopRadius / max(uTowerBaseRadius, 1e-3), t);
+  } else if (uTowerTaperingType == 3) {
+    // S-Curve (smoothstep)
+    float s = t * t * (3.0 - 2.0 * t);
+    radius = uTowerBaseRadius - (uTowerBaseRadius - uTowerTopRadius) * s;
+  } else {
+    // Setback
+    float step = floor(t * 4.0) / 4.0;
+    radius = uTowerBaseRadius - (uTowerBaseRadius - uTowerTopRadius) * step;
+  }
+
+  // Apply floor variation (per-floor randomness)
+  if (uTowerFloorVariation > 0.001) {
+    float floorIndex = floor(y / max(uTowerFloorHeight, 1e-3));
+    float variation = fract(sin(floorIndex * 78.233) * 43758.5453) - 0.5;
+    radius += variation * uTowerFloorVariation * radius;
+  }
+
+  // Apply asymmetry (directional variation)
+  if (uTowerAsymmetry > 0.001) {
+    float angleVar = atan(z, x);
+    radius += sin(angleVar * 2.0) * uTowerAsymmetry * radius * 0.2;
+  }
+
+  // Calculate rotation with twisting
+  float rotation = 0.0;
+  if (uTowerTwistingType == 1) {
+    // Uniform
+    rotation = uTowerTwist * t;
+  } else if (uTowerTwistingType == 2) {
+    // Accelerating
+    rotation = uTowerTwist * t * t;
+  } else if (uTowerTwistingType == 3) {
+    // Sine
+    rotation = uTowerTwist * sin(t * PI / 2.0);
+  }
+
+  // Apply rotation
+  float cos_r = cos(-rotation);
+  float sin_r = sin(-rotation);
+  float rx = x * cos_r - z * sin_r;
+  float rz = x * sin_r + z * cos_r;
+
+  // Distance from center in XZ plane
+  float dist2D = length(vec2(rx, rz));
+
+  // Shape-based distance
+  float shapeDist;
+  float angle = atan(rz, rx);
+
+  if (uTowerShapeType == 0) {
+    // Circle
+    shapeDist = dist2D - radius;
+  } else if (uTowerShapeType == 1) {
+    // Square with corner rounding
+    float cornerDist = max(abs(rx), abs(rz));
+    // Apply corner rounding if enabled
+    if (uTowerCornerRadius > 0.001) {
+      vec2 q = abs(vec2(rx, rz)) - radius + uTowerCornerRadius * radius;
+      shapeDist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uTowerCornerRadius * radius;
+    } else {
+      shapeDist = cornerDist - radius;
+    }
+  } else if (uTowerShapeType == 2) {
+    // Triangle
+    float a = mod(angle + PI, TAU / 3.0) - PI / 3.0;
+    float triRadius = radius / cos(PI / 3.0);
+    shapeDist = max(dist2D * cos(a) - triRadius * 0.5, abs(dist2D * sin(a)) - triRadius * 0.866);
+  } else if (uTowerShapeType == 3) {
+    // Pentagon (5 sides)
+    float a = mod(angle + PI, TAU / 5.0) - PI / 5.0;
+    float pentRadius = radius / cos(PI / 5.0);
+    shapeDist = dist2D * cos(a) - pentRadius;
+  } else if (uTowerShapeType == 4) {
+    // Hexagon (6 sides)
+    float a = mod(angle + PI / 6.0, TAU / 6.0) - PI / 6.0;
+    float hexRadius = radius / cos(PI / 6.0);
+    shapeDist = dist2D * cos(a) - hexRadius;
+  } else if (uTowerShapeType == 5) {
+    // Octagon (8 sides)
+    float a = mod(angle + PI / 8.0, TAU / 8.0) - PI / 8.0;
+    float octRadius = radius / cos(PI / 8.0);
+    shapeDist = dist2D * cos(a) - octRadius;
+  } else if (uTowerShapeType == 6) {
+    // Star (5-pointed)
+    float starAngle = mod(angle + PI, TAU / 5.0);
+    float innerRadius = radius * 0.5;
+    float outerRadius = radius;
+    float modAngle = mod(starAngle, TAU / 10.0);
+    float targetRadius = mix(outerRadius, innerRadius, step(TAU / 20.0, modAngle));
+    shapeDist = dist2D - targetRadius;
+  } else {
+    // Default to circle for other shapes
+    shapeDist = dist2D - radius;
+  }
+
+  // ファサードディテール - OPTIMIZED FOR STABILITY
+  float facadeDetail = 0.0;
+  float floorLevel = y / max(uTowerFloorHeight, 1e-3);
+  float floorFract = fract(floorLevel);
+
+  // Smooth facade only - reduce noise and flickering
+  if (uTowerFacadeType == 0) {
+    // グリッド型ファサード - SIMPLIFIED
+    // Only subtle floor divisions, no noisy grid
+    float floorSlab = smoothstep(0.90, 0.96, floorFract) * uTowerPanelDepth * 0.8;
+    facadeDetail = floorSlab;
+
+  } else if (uTowerFacadeType == 1) {
+    // カーテンウォール - VERY SMOOTH
+    // Minimal detail for glass curtain wall
+    float floorSlab = smoothstep(0.92, 0.98, floorFract) * 0.01;
+    facadeDetail = floorSlab;
+
+  } else {
+    // パネル型ファサード - SMOOTH PANELS
+    float floorSlab = smoothstep(0.90, 0.96, floorFract) * uTowerPanelDepth * 0.6;
+    facadeDetail = floorSlab;
+  }
+
+  shapeDist -= facadeDetail;
+
+  // バルコニー (レジデンス用) - SIMPLIFIED FOR STABILITY
+  if (uTowerBalconyDepth > 0.01 && uTowerBalconyRatio > 0.01) {
+    float floorIndex = floor(floorLevel);
+    float balconyHash = fract(sin(floorIndex * 78.233) * 43758.5453);
+
+    // バルコニーがある階かどうか - simplified condition
+    if (balconyHash < uTowerBalconyRatio && floorFract > 0.88 && floorFract < 0.98) {
+      float balconyDepth = uTowerBalconyDepth * 0.8; // Reduced depth for stability
+
+      // シンプルなバルコニー (張り出しのみ、手すりなし)
+      // Simple extrusion without complex railing
+      float balconyDist = dist2D - (radius + balconyDepth);
+      float balconyBlend = smoothstep(0.88, 0.92, floorFract) * smoothstep(0.98, 0.94, floorFract);
+
+      // Blend balcony smoothly to avoid sharp edges
+      shapeDist = mix(shapeDist, min(shapeDist, balconyDist), balconyBlend * 0.8);
+    }
+  }
+
+  // 大きな構造分割 (5階ごと) - REDUCED
+  float structuralDivision = smoothstep(0.96, 1.0, fract(floorLevel / 5.0)) * 0.06;
+  shapeDist += structuralDivision;
+
+  // コーナーディテール - DISABLED for simple shapes to reduce noise
+  // Complex shapes only
+  if (uTowerShapeType > 2) {
+    float cornerDetail = smoothstep(0.94, 1.0, dist2D / max(radius, 1e-3)) * 0.02;
+    shapeDist += cornerDetail;
+  }
+
+  trap = vec4(abs(p), shapeDist + 1.0);
+
+  return shapeDist;
+}
+
 // Scene SDF with mode selection
 float sceneSDF(vec3 p, out vec4 trap) {
   if (uMode == 1) {
@@ -928,6 +1147,9 @@ float sceneSDF(vec3 p, out vec4 trap) {
   } else if (uMode == 8) {
     // Cosmic Bloom mode
     return cosmicBloomDE(p, trap);
+  } else if (uMode == 9) {
+    // Parametric Tower mode
+    return parametricTowerDE(p, trap);
   } else {
     // Mode 0: Mandelbulb (default)
     return mandelbulbDE(p, trap);
