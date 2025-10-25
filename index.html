@@ -274,18 +274,173 @@
       color: rgba(229, 229, 229, 0.8);
       margin-right: 8px;
     }
+    .mode-switch {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      font-weight: 600;
+      font-size: 13px;
+      background: linear-gradient(135deg, rgba(0, 255, 204, 0.15), rgba(135, 206, 250, 0.15));
+      border: 2px solid var(--accent);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .mode-switch:hover {
+      background: linear-gradient(135deg, rgba(0, 255, 204, 0.25), rgba(135, 206, 250, 0.25));
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 255, 204, 0.3);
+    }
+    .mode-switch #mode-icon {
+      font-size: 16px;
+      display: inline-block;
+      transition: transform 0.3s;
+    }
+    .mode-switch:hover #mode-icon {
+      transform: rotate(180deg) scale(1.2);
+    }
+    .mode-switch.architecture {
+      background: linear-gradient(135deg, rgba(255, 165, 0, 0.15), rgba(255, 215, 0, 0.15));
+      border-color: #ffa500;
+    }
+    .mode-switch.architecture:hover {
+      background: linear-gradient(135deg, rgba(255, 165, 0, 0.25), rgba(255, 215, 0, 0.25));
+      box-shadow: 0 4px 12px rgba(255, 165, 0, 0.3);
+    }
+    /* Help Panel */
+    #help-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(17, 17, 17, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      backdrop-filter: blur(15px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      max-width: 320px;
+      display: none;
+      z-index: 1000;
+    }
+    #help-panel.visible {
+      display: block;
+    }
+    #help-panel h3 {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      color: var(--accent);
+      font-weight: 600;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .help-section {
+      margin-bottom: 16px;
+    }
+    .help-section h4 {
+      font-size: 12px;
+      color: var(--text);
+      margin: 0 0 8px 0;
+      font-weight: 600;
+      opacity: 0.9;
+    }
+    .help-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 11px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .help-item:last-child {
+      border-bottom: none;
+    }
+    .help-key {
+      font-family: 'Courier New', monospace;
+      background: rgba(0, 255, 204, 0.1);
+      border: 1px solid var(--accent);
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .help-desc {
+      color: rgba(229, 229, 229, 0.8);
+    }
+    #help-toggle {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 255, 204, 0.15);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.3s;
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(10px);
+    }
+    #help-toggle:hover {
+      background: rgba(0, 255, 204, 0.25);
+      transform: scale(1.1) rotate(90deg);
+      box-shadow: 0 4px 12px rgba(0, 255, 204, 0.3);
+    }
   </style>
 </head>
 <body>
   <div id="app">
     <header>
       <h1>🌸 3D Mandelbulb Visualizer</h1>
+      <button id="btnModeSwitch" class="control-btn mode-switch" title="Switch between Fractal and Architecture modes">
+        <span id="mode-icon">🌀</span>
+        <span id="mode-text">Fractal Mode</span>
+      </button>
       <div class="sep"></div>
       <div class="badge live">LIVE</div>
-      <div class="pill">Miyabi Framework</div>
-    </header>
-    <main>
+    </header>    <main>
       <canvas id="gl"></canvas>
+      <button id="help-toggle" title="Toggle Help">?</button>
+      <div id="help-panel">
+        <h3>⌨️ Keyboard Shortcuts</h3>
+        <div class="help-section">
+          <h4>🎨 Color Palette</h4>
+          <div class="help-item">
+            <span class="help-key">← →</span>
+            <span class="help-desc">Switch Colors</span>
+          </div>
+          <div class="help-item">
+            <span class="help-key">1-9, 0</span>
+            <span class="help-desc">Quick Select</span>
+          </div>
+          <div class="help-item">
+            <span class="help-key">R</span>
+            <span class="help-desc">Random Palette</span>
+          </div>
+        </div>
+        <div class="help-section">
+          <h4>🖱️ Camera Controls</h4>
+          <div class="help-item">
+            <span class="help-key">Drag</span>
+            <span class="help-desc">Rotate View</span>
+          </div>
+          <div class="help-item">
+            <span class="help-key">Scroll</span>
+            <span class="help-desc">Zoom In/Out</span>
+          </div>
+        </div>
+        <div class="help-section">
+          <h4>📸 Quick Actions</h4>
+          <div class="help-item">
+            <span class="help-key">?</span>
+            <span class="help-desc">Toggle This Help</span>
+          </div>
+        </div>
+      </div>
       <div id="color-palette">
         <h3>🎨 Color Themes</h3>
         <div class="palette-grid" id="palette-grid">
@@ -313,6 +468,8 @@
         <option value="512">Extreme (512³)</option>
       </select>
       <button id="btnExportGLB" class="control-btn" style="background: rgba(0, 255, 204, 0.1); border-color: var(--accent);">📦 Export GLB</button>
+      <button id="btnExportArchitecture" class="control-btn" style="background: rgba(255, 165, 0, 0.1); border-color: #ffa500;">🏛️ Export Architecture</button>
+      <button id="btnUploadSpeckle" class="control-btn" style="background: rgba(135, 206, 250, 0.1); border-color: #87ceeb;">☁️ Upload to Speckle</button>
       <div class="sep"></div>
       <span>Controls: Mouse drag to rotate | Scroll to zoom</span>
       <div class="sep"></div>

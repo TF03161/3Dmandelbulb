@@ -4,6 +4,11 @@
  */
 
 import GUI from 'lil-gui';
+import { modeManager } from '../modes/mode-manager';
+import { AppMode, MODE_CONFIGS } from '../modes/mode-types';
+import { addFacadeDesignControls } from './facade-controls';
+import { presetManager, type Preset } from './preset-manager';
+import { ScreenshotCapture } from '../utils/screenshot';
 
 interface RendererWithParams {
   params: {
@@ -103,6 +108,8 @@ function setupControlButtons(renderer: RendererWithParams): void {
   const btnScreenshot = document.getElementById('btnScreenshot');
   const btnRecordVideo = document.getElementById('btnRecordVideo');
   const btnExportGLB = document.getElementById('btnExportGLB');
+  const helpToggle = document.getElementById('help-toggle');
+  const helpPanel = document.getElementById('help-panel');
 
   if (btnAutoColor) {
     btnAutoColor.addEventListener('click', () => {
@@ -136,6 +143,31 @@ function setupControlButtons(renderer: RendererWithParams): void {
         }
       }
     });
+  }
+
+  // Enhanced Screenshot System
+  if (btnScreenshot) {
+    const canvas = document.getElementById('gl') as HTMLCanvasElement;
+    if (canvas) {
+      const screenshotCapture = new ScreenshotCapture(canvas);
+
+      btnScreenshot.addEventListener('click', () => {
+        const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+        const modeNames = [
+          'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+          'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+        ];
+        const modeName = r ? modeNames[r.params.mode] || 'Fractal' : 'Fractal';
+
+        screenshotCapture.capture({
+          filename: `3dmandelbulb_${modeName}`,
+          format: 'png',
+          quality: 0.95,
+          scale: 1,
+          timestamp: true
+        });
+      });
+    }
   }
 
   if (btnScreenshot) {
@@ -443,6 +475,203 @@ function setupControlButtons(renderer: RendererWithParams): void {
       }
     });
   }
+
+  // Architecture Export button
+  const btnExportArchitecture = document.getElementById('btnExportArchitecture') as HTMLButtonElement;
+  if (btnExportArchitecture) {
+    btnExportArchitecture.addEventListener('click', async () => {
+      const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (!r) {
+        alert('Renderer not ready. Please wait a moment and try again.');
+        return;
+      }
+
+      // Get export resolution
+      const exportResolutionSelect = document.getElementById('exportResolution') as HTMLSelectElement;
+      const exportResolution = exportResolutionSelect ? parseInt(exportResolutionSelect.value, 10) : 128;
+
+      const originalText = btnExportArchitecture.textContent;
+      btnExportArchitecture.textContent = '⏳ Building...';
+      btnExportArchitecture.setAttribute('disabled', 'true');
+
+      // Detect model name
+      const modeNames = [
+        'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+        'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+      ];
+      const modelName = modeNames[r.params.mode] || 'Model';
+
+      // Create progress overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+
+      const progressBox = document.createElement('div');
+      progressBox.style.cssText = `
+        background: rgba(30, 30, 30, 0.95);
+        border: 2px solid var(--accent);
+        padding: 2rem;
+        border-radius: 8px;
+        min-width: 400px;
+      `;
+
+      const progressText = document.createElement('div');
+      progressText.textContent = '🏛️ Building architectural model...';
+      progressText.style.cssText = 'margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-primary);';
+
+      const progressBar = document.createElement('div');
+      progressBar.style.cssText = `
+        width: 100%;
+        height: 24px;
+        background: rgba(100, 100, 100, 0.3);
+        border-radius: 12px;
+        overflow: hidden;
+      `;
+
+      const progressFill = document.createElement('div');
+      progressFill.style.cssText = `
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--accent), #ffa500);
+        transition: width 0.3s ease;
+      `;
+
+      progressBar.appendChild(progressFill);
+      progressBox.appendChild(progressText);
+      progressBox.appendChild(progressBar);
+      overlay.appendChild(progressBox);
+      document.body.appendChild(overlay);
+
+      try {
+        // Dynamic import to avoid bundling issues
+        const { buildArchitecturalModel } = await import('../pipelines/build-architectural-model');
+        const { exportArchitecturalGLTF, downloadArchitecturalGLTF } = await import('../export/export-shell-and-frame');
+
+        // Get SDF function based on mode
+        let sdfFunc: (p: { x: number; y: number; z: number }) => number;
+        let bbox: { min: { x: number; y: number; z: number }; max: { x: number; y: number; z: number } };
+
+        if (r.params.mode === 0) {
+          // Mandelbulb
+          const { sdfMandelbulb } = await import('../export/sdf/mandelbulb');
+          sdfFunc = (p) => sdfMandelbulb(p, {
+            maxIterations: r.params.maxIterations || 15,
+            powerBase: r.params.powerBase || 8.0,
+            powerAmp: r.params.powerAmp || 0.0,
+            time: 0
+          });
+          bbox = {
+            min: { x: -2.5, y: -2.5, z: -2.5 },
+            max: { x: 2.5, y: 2.5, z: 2.5 }
+          };
+        } else if (r.params.mode === 3) {
+          // Mandelbox
+          const { sdfMandelbox } = await import('../export/sdf/mandelbox');
+          sdfFunc = (p) => sdfMandelbox(p, {
+            mbIter: r.params.mbIter || 15,
+            mbScale: r.params.mbScale || 2.0,
+            mbMinRadius: r.params.mbMinRadius || 0.5,
+            mbFixedRadius: r.params.mbFixedRadius || 1.0
+          });
+          bbox = {
+            min: { x: -3.0, y: -3.0, z: -3.0 },
+            max: { x: 3.0, y: 3.0, z: 3.0 }
+          };
+        } else if (r.params.mode === 5) {
+          // Gyroid
+          const { sdfGyroid } = await import('../export/sdf/gyroid');
+          sdfFunc = (p) => sdfGyroid(p, {
+            gyroLevel: r.params.gyroLevel || 0.0,
+            gyroScale: r.params.gyroScale || 1.0,
+            gyroMod: r.params.gyroMod || 0.0
+          });
+          bbox = {
+            min: { x: -5.0, y: -5.0, z: -5.0 },
+            max: { x: 5.0, y: 5.0, z: 5.0 }
+          };
+        } else {
+          alert('Architecture export currently supports Mandelbulb, Mandelbox, and Gyroid modes only.');
+          throw new Error('Unsupported mode for architecture export');
+        }
+
+        progressText.textContent = '🏛️ Extracting Shell...';
+        progressFill.style.width = '20%';
+
+        // Build architectural model
+        const archModel = buildArchitecturalModel(sdfFunc, bbox, {
+          resolution: exportResolution,
+          shellThreshold: 0.0,
+          floorHeight: 3.5,
+          coreRadius: 2.0,
+          panelAngleThreshold: 15
+        });
+
+        progressText.textContent = '📊 Evaluating model...';
+        progressFill.style.width = '70%';
+
+        // Export to GLTF with evaluation (self-contained JSON with embedded base64)
+        const gltfJson = exportArchitecturalGLTF(archModel, modelName.toLowerCase(), true);
+
+        progressText.textContent = '💾 Downloading...';
+        progressFill.style.width = '95%';
+
+        // Download single .gltf file (Three.js editor compatible)
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        downloadArchitecturalGLTF(gltfJson, `${modelName}-Architecture-${timestamp}.gltf`);
+
+        // Success
+        progressText.textContent = `✅ Export complete! Floors: ${archModel.metadata.totalFloors} | Panels: ${archModel.metadata.panelCount}`;
+        progressFill.style.width = '100%';
+
+        setTimeout(() => {
+          document.body.removeChild(overlay);
+        }, 3000);
+
+      } catch (error) {
+        console.error('Architecture export failed:', error);
+        progressText.textContent = `❌ Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        progressText.style.color = 'var(--danger)';
+
+        setTimeout(() => {
+          document.body.removeChild(overlay);
+        }, 3000);
+      } finally {
+        btnExportArchitecture.textContent = originalText;
+        btnExportArchitecture.removeAttribute('disabled');
+      }
+    });
+  }
+
+  // Help Panel toggle
+  if (helpToggle && helpPanel) {
+    helpToggle.addEventListener('click', () => {
+      helpPanel.classList.toggle('visible');
+      console.log('ℹ️ Help panel toggled');
+    });
+
+    // Close help panel when clicking outside
+    document.addEventListener('click', (e) => {
+      if (helpPanel.classList.contains('visible') &&
+          !helpPanel.contains(e.target as Node) &&
+          e.target !== helpToggle) {
+        helpPanel.classList.remove('visible');
+      }
+    });
+
+    // Close help panel with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && helpPanel.classList.contains('visible')) {
+        helpPanel.classList.remove('visible');
+      }
+    });
+  }
 }
 
 function updateFormula(mode: number): void {
@@ -503,6 +732,20 @@ function updateFormula(mode: number): void {
       <div><span class="var">g</span> = sin(<span class="var">x</span>)cos(<span class="var">y</span>) + sin(<span class="var">y</span>)cos(<span class="var">z</span>) + sin(<span class="var">z</span>)cos(<span class="var">x</span>)</div>
       <div style="margin-top:8px;">Triply periodic surface</div>
       <div>Zero mean curvature everywhere</div>
+    `;
+  } else if (mode === 9) {
+    // Parametric Tower formula
+    const renderer = (window as any).renderer;
+    const towerParams = (renderer as any)?.towerParams || {};
+
+    formulaContent.innerHTML = `
+      <div>🏗️ Parametric Tower Architecture</div>
+      <div style="margin-top:8px;">Height: <span class="param">${towerParams.height?.toFixed(0) || 150}m</span>, Floors: <span class="param">${towerParams.floorCount?.toFixed(0) || 50}</span></div>
+      <div style="margin-top:4px;">Radius Interpolation:</div>
+      <div><span class="var">r</span>(<span class="var">t</span>) = <span class="param">R<sub>base</sub></span> + (<span class="param">R<sub>top</sub></span> - <span class="param">R<sub>base</sub></span>) · <span class="var">f</span>(<span class="var">t</span>)</div>
+      <div style="margin-top:4px;">Twist Function:</div>
+      <div><span class="var">θ</span>(<span class="var">t</span>) = <span class="param">θ<sub>max</sub></span> · <span class="var">g</span>(<span class="var">t</span>)</div>
+      <div style="margin-top:4px;">where <span class="var">t</span> = <span class="var">y</span> / <span class="param">h</span> ∈ [0, 1]</div>
     `;
   }
 }
@@ -1218,87 +1461,275 @@ function setupGUI(renderer: RendererWithParams): void {
   // Add shape presets to GUI
   setupShapePresetsInGUI(gui, renderer);
 
-  // User Preset Management
+  // User Preset Management (Enhanced with PresetManager)
   const userPresetFolder = gui.addFolder('💾 User Presets');
+
+  // Preset selection dropdown
+  const presetList: { [key: string]: string } = {};
+  const updatePresetList = () => {
+    // Clear existing
+    Object.keys(presetList).forEach(k => delete presetList[k]);
+
+    // Add all presets
+    const allPresets = presetManager.getAllPresets();
+    allPresets.forEach(preset => {
+      presetList[preset.name] = preset.id;
+    });
+  };
+
+  updatePresetList();
+
+  const presetState = {
+    selectedPreset: '',
+    presetCategory: 'All'
+  };
+
+  // Category filter
+  const categories = ['All', 'Mandelbulb', 'Mandelbox', 'Gyroid', 'Custom'];
+  userPresetFolder.add(presetState, 'presetCategory', categories).name('Category').onChange(updatePresetList);
+
   const presetActions = {
     'Save Current': () => {
       const presetName = prompt('Enter preset name:');
       if (!presetName) return;
 
+      const description = prompt('Enter description (optional):') || '';
+      const category = prompt('Enter category (Mandelbulb, Mandelbox, etc.):') || 'Custom';
+
       try {
-        // Save all parameters to localStorage
-        const presetData = {
-          params: JSON.parse(JSON.stringify(renderer.params)),
-          seed: Array.from(renderer.params.seed),
-          quatC: Array.from(renderer.params.quatC)
-        };
-        localStorage.setItem(`preset_${presetName}`, JSON.stringify(presetData));
-        alert(`Preset "${presetName}" saved successfully!`);
+        const preset = presetManager.savePreset({
+          name: presetName,
+          description,
+          category,
+          params: {
+            mode: renderer.params.mode,
+            maxIterations: renderer.params.maxIterations,
+            powerBase: renderer.params.powerBase,
+            powerAmp: renderer.params.powerAmp,
+            scale: renderer.params.scale,
+            epsilon: renderer.params.epsilon,
+            maxSteps: renderer.params.maxSteps,
+            aoIntensity: renderer.params.aoIntensity,
+            reflectivity: renderer.params.reflectivity,
+            palSpeed: renderer.params.palSpeed,
+            palSpread: renderer.params.palSpread,
+            juliaMix: renderer.params.juliaMix,
+            twist: renderer.params.twist,
+            morphOn: renderer.params.morphOn,
+            fold: renderer.params.fold,
+            boxSize: renderer.params.boxSize,
+            mbScale: renderer.params.mbScale,
+            mbMinRadius: renderer.params.mbMinRadius,
+            mbFixedRadius: renderer.params.mbFixedRadius,
+            mbIter: renderer.params.mbIter,
+            gyroLevel: renderer.params.gyroLevel,
+            gyroScale: renderer.params.gyroScale,
+            gyroMod: renderer.params.gyroMod,
+            colorMode: renderer.params.colorMode
+          }
+        });
+
+        updatePresetList();
+        alert(`✅ Preset "${preset.name}" saved successfully!`);
       } catch (error) {
-        alert('Failed to save preset. ' + (error instanceof Error ? error.message : ''));
+        alert('❌ Failed to save preset. ' + (error instanceof Error ? error.message : ''));
       }
     },
+
     'Load Preset': () => {
-      const presetName = prompt('Enter preset name to load:');
+      const allPresets = presetManager.getAllPresets();
+      if (allPresets.length === 0) {
+        alert('No presets available. Save one first!');
+        return;
+      }
+
+      const presetNames = allPresets.map(p => p.name).join('\n');
+      const presetName = prompt('Available presets:\n\n' + presetNames + '\n\nEnter name to load:');
       if (!presetName) return;
 
+      const preset = allPresets.find(p => p.name === presetName);
+      if (!preset) {
+        alert(`Preset "${presetName}" not found.`);
+        return;
+      }
+
       try {
-        const presetData = localStorage.getItem(`preset_${presetName}`);
-        if (!presetData) {
-          alert(`Preset "${presetName}" not found.`);
-          return;
-        }
+        // Apply preset parameters
+        Object.keys(preset.params).forEach(key => {
+          const value = preset.params[key as keyof typeof preset.params];
+          if (value !== undefined && key in renderer.params) {
+            (renderer.params as any)[key] = value;
+          }
+        });
 
-        const data = JSON.parse(presetData);
-        // Restore all parameters
-        Object.assign(renderer.params, data.params);
-        if (data.seed) {
-          data.seed.forEach((v: number, i: number) => renderer.params.seed[i] = v);
-        }
-        if (data.quatC) {
-          data.quatC.forEach((v: number, i: number) => renderer.params.quatC[i] = v);
-        }
-        alert(`Preset "${presetName}" loaded successfully!`);
-
-        // Update formula display
+        alert(`✅ Preset "${preset.name}" loaded!\n\n${preset.description}`);
         updateFormula(renderer.params.mode);
       } catch (error) {
-        alert('Failed to load preset. ' + (error instanceof Error ? error.message : ''));
+        alert('❌ Failed to load preset. ' + (error instanceof Error ? error.message : ''));
       }
     },
-    'List Presets': () => {
-      const presets: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('preset_')) {
-          presets.push(key.replace('preset_', ''));
-        }
+
+    'Browse Presets': () => {
+      const allPresets = presetManager.getAllPresets();
+      if (allPresets.length === 0) {
+        alert('No presets saved yet.');
+        return;
       }
 
-      if (presets.length === 0) {
-        alert('No saved presets found.');
-      } else {
-        alert('Saved presets:\n\n' + presets.join('\n'));
-      }
+      const presetInfo = allPresets.map(p =>
+        `📌 ${p.name}\n   Category: ${p.category}\n   ${p.description}\n   Created: ${new Date(p.createdAt).toLocaleDateString()}`
+      ).join('\n\n');
+
+      alert('Saved Presets:\n\n' + presetInfo);
     },
+
     'Delete Preset': () => {
-      const presetName = prompt('Enter preset name to delete:');
+      const allPresets = presetManager.getAllPresets();
+      const presetNames = allPresets.map(p => p.name).join('\n');
+      const presetName = prompt('Available presets:\n\n' + presetNames + '\n\nEnter name to delete:');
       if (!presetName) return;
 
-      const key = `preset_${presetName}`;
-      if (localStorage.getItem(key)) {
-        localStorage.removeItem(key);
-        alert(`Preset "${presetName}" deleted successfully!`);
-      } else {
+      const preset = allPresets.find(p => p.name === presetName);
+      if (!preset) {
         alert(`Preset "${presetName}" not found.`);
+        return;
       }
+
+      if (confirm(`Delete preset "${presetName}"?`)) {
+        presetManager.deletePreset(preset.id);
+        updatePresetList();
+        alert(`✅ Preset "${presetName}" deleted.`);
+      }
+    },
+
+    'Export All': () => {
+      const json = presetManager.exportPresets();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '3dmandelbulb-presets.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      alert('✅ Presets exported successfully!');
+    },
+
+    'Import Presets': () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/json';
+      input.onchange = async (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) return;
+
+        try {
+          const text = await file.text();
+          const count = presetManager.importPresets(text);
+          updatePresetList();
+          alert(`✅ Imported ${count} presets successfully!`);
+        } catch (error) {
+          alert('❌ Failed to import presets. ' + (error instanceof Error ? error.message : ''));
+        }
+      };
+      input.click();
     }
   };
 
   userPresetFolder.add(presetActions, 'Save Current');
   userPresetFolder.add(presetActions, 'Load Preset');
-  userPresetFolder.add(presetActions, 'List Presets');
+  userPresetFolder.add(presetActions, 'Browse Presets');
   userPresetFolder.add(presetActions, 'Delete Preset');
+  userPresetFolder.add(presetActions, 'Export All');
+  userPresetFolder.add(presetActions, 'Import Presets');
+
+  // Screenshot folder with advanced options
+  const screenshotFolder = gui.addFolder('📸 Screenshot');
+  const screenshotOptions = {
+    format: 'png' as 'png' | 'jpg' | 'webp',
+    quality: 95,
+    scale: 1,
+    timestamp: true,
+    'Quick Screenshot': () => {
+      const canvas = document.getElementById('gl') as HTMLCanvasElement;
+      if (!canvas) {
+        alert('Canvas not found');
+        return;
+      }
+
+      const capture = new ScreenshotCapture(canvas);
+      const modeNames = [
+        'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+        'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+      ];
+      const modeName = modeNames[renderer.params.mode] || 'Fractal';
+
+      capture.capture({
+        filename: `3dmandelbulb_${modeName}`,
+        format: screenshotOptions.format,
+        quality: screenshotOptions.quality / 100,
+        scale: screenshotOptions.scale,
+        timestamp: screenshotOptions.timestamp
+      });
+    },
+    'High-Res (2x)': () => {
+      const canvas = document.getElementById('gl') as HTMLCanvasElement;
+      if (!canvas) return;
+
+      const capture = new ScreenshotCapture(canvas);
+      const modeNames = [
+        'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+        'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+      ];
+      const modeName = modeNames[renderer.params.mode] || 'Fractal';
+
+      capture.capture({
+        filename: `3dmandelbulb_${modeName}_2x`,
+        format: screenshotOptions.format,
+        quality: screenshotOptions.quality / 100,
+        scale: 2,
+        timestamp: screenshotOptions.timestamp
+      });
+    },
+    'Ultra-Res (4x)': () => {
+      const canvas = document.getElementById('gl') as HTMLCanvasElement;
+      if (!canvas) return;
+
+      const modeNames = [
+        'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+        'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+      ];
+      const modeName = modeNames[renderer.params.mode] || 'Fractal';
+
+      alert('⏳ Capturing 4x resolution... This may take a moment.');
+
+      setTimeout(() => {
+        const capture = new ScreenshotCapture(canvas);
+        capture.capture({
+          filename: `3dmandelbulb_${modeName}_4x`,
+          format: screenshotOptions.format,
+          quality: screenshotOptions.quality / 100,
+          scale: 4,
+          timestamp: screenshotOptions.timestamp
+        });
+      }, 100);
+    },
+    'Copy to Clipboard': async () => {
+      const canvas = document.getElementById('gl') as HTMLCanvasElement;
+      if (!canvas) return;
+
+      const capture = new ScreenshotCapture(canvas);
+      await capture.copyToClipboard();
+    }
+  };
+
+  screenshotFolder.add(screenshotOptions, 'format', ['png', 'jpg', 'webp']).name('Format');
+  screenshotFolder.add(screenshotOptions, 'quality', 1, 100, 1).name('Quality %');
+  screenshotFolder.add(screenshotOptions, 'scale', [1, 2, 4]).name('Resolution Scale');
+  screenshotFolder.add(screenshotOptions, 'timestamp').name('Add Timestamp');
+  screenshotFolder.add(screenshotOptions, 'Quick Screenshot');
+  screenshotFolder.add(screenshotOptions, 'High-Res (2x)');
+  screenshotFolder.add(screenshotOptions, 'Ultra-Res (4x)');
+  screenshotFolder.add(screenshotOptions, 'Copy to Clipboard');
 
   // Initial formula display
   updateFormula(renderer.params.mode);
@@ -1576,14 +2007,1175 @@ function setupGUI(renderer: RendererWithParams): void {
 
   postFolder.open();
 
-  console.log('🎨 UI Controls initialized with Advanced Post-Processing (HDR, Tone Mapping, DOF)');
+  // ================================================================
+  // Speckle Integration
+  // ================================================================
+
+  const speckleFolder = gui.addFolder('☁️ Speckle Cloud');
+
+  // Speckle configuration object
+  const speckleConfig = {
+    serverUrl: 'https://speckle.xyz',
+    token: '',
+    streamId: '',
+    branchName: 'main',
+    commitMessage: ''
+  };
+
+  speckleFolder.add(speckleConfig, 'serverUrl').name('Server URL');
+  speckleFolder.add(speckleConfig, 'token').name('Access Token');
+  speckleFolder.add(speckleConfig, 'streamId').name('Stream ID (optional)');
+  speckleFolder.add(speckleConfig, 'branchName').name('Branch Name');
+  speckleFolder.add(speckleConfig, 'commitMessage').name('Commit Message');
+
+  // Speckle Upload Button Handler
+  const btnUploadSpeckle = document.getElementById('btnUploadSpeckle') as HTMLButtonElement;
+  if (btnUploadSpeckle) {
+    btnUploadSpeckle.addEventListener('click', async () => {
+      // Validation
+      if (!speckleConfig.token || speckleConfig.token.trim() === '') {
+        alert('Please enter your Speckle Personal Access Token in the GUI controls.\n\nYou can generate one at: https://speckle.xyz/profile');
+        return;
+      }
+
+      // Create progress overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        color: white;
+        font-family: system-ui;
+        backdrop-filter: blur(10px);
+      `;
+
+      const statusText = document.createElement('div');
+      statusText.style.cssText = `
+        font-size: 20px;
+        margin-bottom: 20px;
+        text-align: center;
+      `;
+      statusText.textContent = '☁️ Uploading to Speckle...';
+
+      const progressBar = document.createElement('div');
+      progressBar.style.cssText = `
+        width: 400px;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        overflow: hidden;
+      `;
+
+      const progressFill = document.createElement('div');
+      progressFill.style.cssText = `
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, #00ffcc, #87ceeb);
+        transition: width 0.3s;
+      `;
+      progressBar.appendChild(progressFill);
+
+      const detailText = document.createElement('div');
+      detailText.style.cssText = `
+        font-size: 14px;
+        margin-top: 16px;
+        opacity: 0.7;
+        text-align: center;
+      `;
+
+      overlay.appendChild(statusText);
+      overlay.appendChild(progressBar);
+      overlay.appendChild(detailText);
+      document.body.appendChild(overlay);
+
+      try {
+        // Get renderer
+        const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+        if (!r) {
+          alert('Renderer not ready. Please wait a moment and try again.');
+          document.body.removeChild(overlay);
+          return;
+        }
+
+        // Determine which SDF to use based on mode
+        let sdfFunc: (p: any) => number;
+        let modelName = 'Fractal';
+
+        if (r.params.mode === 0) {
+          // Mandelbulb
+          const { sdfMandelbulb } = await import('../export/sdf/mandelbulb');
+          sdfFunc = (p) => sdfMandelbulb(p, {
+            maxIterations: r.params.maxIterations,
+            powerBase: r.params.powerBase,
+            powerAmp: r.params.powerAmp,
+            time: 0
+          });
+          modelName = 'Mandelbulb';
+        } else if (r.params.mode === 3) {
+          // Mandelbox
+          const { sdfMandelbox } = await import('../export/sdf/mandelbox');
+          sdfFunc = (p) => sdfMandelbox(p, {
+            mbScale: r.params.mbScale,
+            mbMinRadius: r.params.mbMinRadius,
+            mbFixedRadius: r.params.mbFixedRadius,
+            mbIter: r.params.mbIter
+          });
+          modelName = 'Mandelbox';
+        } else if (r.params.mode === 5) {
+          // Gyroid
+          const { sdfGyroid } = await import('../export/sdf/gyroid');
+          sdfFunc = (p) => sdfGyroid(p, {
+            gyroScale: r.params.gyroScale,
+            gyroLevel: r.params.gyroLevel,
+            gyroMod: r.params.gyroMod
+          });
+          modelName = 'Gyroid';
+        } else {
+          throw new Error('Selected mode is not supported for Speckle upload. Please use Mandelbulb, Mandelbox, or Gyroid.');
+        }
+
+        detailText.textContent = `Building ${modelName} architecture...`;
+
+        // Build architectural model
+        const { buildArchitecturalModel } = await import('../pipelines/build-architectural-model');
+        const bbox = {
+          min: { x: -4, y: -4, z: -4 },
+          max: { x: 4, y: 4, z: 4 }
+        };
+
+        const archModel = buildArchitecturalModel(sdfFunc, bbox, {
+          resolution: 192
+        });
+
+        progressFill.style.width = '30%';
+        detailText.textContent = 'Converting to Speckle format...';
+
+        // Upload to Speckle
+        const { uploadToSpeckle } = await import('../export/speckle-uploader');
+
+        const metadata = {
+          name: `${modelName} Architecture - ${new Date().toISOString()}`,
+          description: `Fractal-derived architectural model from 3Dmandelbulb`,
+          fractal_type: modelName.toLowerCase(),
+          export_date: new Date().toISOString(),
+          application: '3Dmandelbulb',
+          version: '1.0',
+          units: 'm'
+        };
+
+        const result = await uploadToSpeckle(
+          archModel,
+          {
+            serverUrl: speckleConfig.serverUrl,
+            token: speckleConfig.token,
+            streamId: speckleConfig.streamId || undefined,
+            branchName: speckleConfig.branchName || 'main',
+            commitMessage: speckleConfig.commitMessage || `${modelName} export - ${new Date().toISOString()}`
+          },
+          metadata,
+          (message, progress) => {
+            progressFill.style.width = `${30 + progress * 70}%`;
+            detailText.textContent = message;
+          }
+        );
+
+        if (result.success) {
+          statusText.textContent = '✅ Upload Successful!';
+          detailText.innerHTML = `
+            <div style="margin-top: 20px;">
+              <strong>Stream ID:</strong> ${result.streamId}<br>
+              <strong>Commit ID:</strong> ${result.commitId}<br>
+              <strong>View on Speckle:</strong> <a href="${result.url}" target="_blank" style="color: #87ceeb;">${result.url}</a>
+            </div>
+            <div style="margin-top: 16px; font-size: 12px; opacity: 0.6;">
+              Click anywhere to close
+            </div>
+          `;
+          progressFill.style.width = '100%';
+        } else {
+          throw new Error(result.error || 'Upload failed');
+        }
+
+      } catch (error) {
+        console.error('Speckle upload error:', error);
+        statusText.textContent = '❌ Upload Failed';
+        detailText.textContent = error instanceof Error ? error.message : 'Unknown error';
+        progressFill.style.background = '#ff4d4d';
+      }
+
+      // Close on click
+      overlay.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+      });
+    });
+  }
+
+  // ================================================================
+  // Mode Switching System
+  // ================================================================
+
+  const btnModeSwitch = document.getElementById('btnModeSwitch') as HTMLButtonElement;
+  const modeIcon = document.getElementById('mode-icon');
+  const modeText = document.getElementById('mode-text');
+
+  if (btnModeSwitch && modeIcon && modeText) {
+    // Update UI based on current mode
+    const updateModeUI = (mode: AppMode) => {
+      const config = MODE_CONFIGS[mode];
+
+      modeIcon.textContent = config.icon;
+      modeText.textContent = config.name;
+
+      // Toggle CSS class
+      if (mode === AppMode.ARCHITECTURE) {
+        btnModeSwitch.classList.add('architecture');
+      } else {
+        btnModeSwitch.classList.remove('architecture');
+      }
+
+      console.log(`Mode UI updated: ${mode} (${config.name})`);
+    };
+
+    // Handle mode switch button click
+    btnModeSwitch.addEventListener('click', () => {
+      modeManager.toggleMode();
+    });
+
+    // Register mode change callback
+    modeManager.onModeChange((newMode, oldMode) => {
+      console.log(`🔄 Mode changed: ${oldMode} → ${newMode}`);
+      updateModeUI(newMode);
+
+      // Show transition notification
+      const notification = document.createElement('div');
+      notification.style.cssText = `
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: linear-gradient(135deg, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.85));
+        border: 2px solid ${newMode === AppMode.ARCHITECTURE ? '#ffa500' : 'var(--accent)'};
+        color: white;
+        padding: 16px 32px;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 600;
+        z-index: 10000;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+        animation: slideDown 0.3s ease-out;
+      `;
+
+      const config = MODE_CONFIGS[newMode];
+      notification.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 24px;">${config.icon}</span>
+          <div>
+            <div style="font-size: 16px; margin-bottom: 4px;">${config.name}</div>
+            <div style="font-size: 12px; opacity: 0.7;">${config.description}</div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(notification);
+
+      // Remove after 3 seconds
+      setTimeout(() => {
+        notification.style.animation = 'slideUp 0.3s ease-in';
+        setTimeout(() => {
+          document.body.removeChild(notification);
+        }, 300);
+      }, 3000);
+
+      // Update GUI panels based on mode
+      updateGUIPanelsForMode(newMode, gui);
+    });
+
+    // Initialize mode from localStorage
+    modeManager.loadMode();
+    updateModeUI(modeManager.getCurrentMode());
+  }
+
+  // Add CSS animations for notifications
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+    @keyframes slideUp {
+      from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  console.log('🎨 UI Controls initialized with Advanced Post-Processing (HDR, Tone Mapping, DOF), Speckle Integration, and Mode Switching');
+}
+
+/**
+ * Update GUI panels based on current mode
+ */
+function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
+  console.log(`Updating GUI for mode: ${mode}`);
+
+  // Get existing folders
+  const folders = (gui as any).folders || [];
+
+  if (mode === AppMode.ARCHITECTURE) {
+    // Architecture Mode: Show building-specific parameters
+    console.log('🏙️ Switching to Architecture Mode GUI');
+
+    // Switch renderer to Tower mode (mode 9)
+    const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+    if (renderer) {
+      renderer.params.mode = 9;
+
+      // ===== Architecture Mode Settings =====
+
+      // Disable morphing (buildings don't morph!)
+      renderer.params.morphOn = 0;
+
+      // Disable fractal-specific deformations
+      renderer.params.twist = 0;
+      renderer.params.fold = 0;
+
+      // Architecture-optimized rendering
+      renderer.params.aoIntensity = 1.5;      // Enhanced ambient occlusion for depth
+      renderer.params.reflectivity = 0.15;    // Subtle reflections
+      renderer.params.shadowSoft = 2.0;       // Soft shadows for realism
+      renderer.params.specPow = 16.0;         // Moderate specular highlights
+
+      // Better lighting for architecture - optimized to reduce flickering
+      renderer.params.maxSteps = 192;         // Higher steps for smooth surfaces
+      renderer.params.epsilon = 0.0005;       // Balanced precision (not too small, not too large)
+
+      // Enable architecture-specific camera system
+      // Use actual tower height from params if available
+      const towerHeight = ((renderer as any).towerParams?.height) || 5.0;
+      if ((renderer as any).setArchitectureMode) {
+        (renderer as any).setArchitectureMode(true, towerHeight);
+      }
+
+      console.log('✅ Architecture Mode: Tower mode (9), morphing disabled, camera positioned');
+    }
+
+    // Hide all fractal-specific folders
+    const fractalFolderNames = [
+      'Fractal Parameters',
+      'Deformations',
+      'Flower of Life',
+      'Fibonacci Shell',
+      'Mandelbox',
+      'Metatron Cube',
+      'Gyroid Cathedral',
+      'Typhoon',
+      'Quaternion Julia',
+      'Cosmic Bloom',
+      'Shape Presets'
+    ];
+
+    folders.forEach((folder: any) => {
+      if (folder._title) {
+        // Hide fractal-specific folders
+        const shouldHide = fractalFolderNames.some(name => folder._title.includes(name));
+        if (shouldHide) {
+          folder.hide();
+        }
+
+        // Show Architecture folder
+        if (folder._title === '🏗️ Parametric Tower') {
+          folder.show();
+          folder.open();
+        }
+      }
+    });
+
+    // Create Architecture Mode folder if not exists
+    let archFolder = folders.find((f: any) => f._title === '🏗️ Parametric Tower');
+    if (!archFolder) {
+      // Create folder immediately (not inside async import)
+      archFolder = gui.addFolder('🏗️ Parametric Tower');
+      archFolder.open(); // Open by default
+      folders.push(archFolder);
+
+      // Import tower generator and populate folder
+      import('../generators/parametric-tower').then(({ FloorShape, TaperingMode, TwistingMode, DEFAULT_TOWER_PARAMS }) => {
+        const towerParams = { ...DEFAULT_TOWER_PARAMS };
+
+        // Real-time tower update function
+        const updateTowerRealtime = () => {
+          const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+          if (!renderer) return;
+
+          // Ensure we're in Tower mode with architecture settings
+          if (renderer.params.mode !== 9) {
+            renderer.params.mode = 9;
+            console.log('🔄 Auto-switched to Tower mode (9)');
+          }
+
+          // Architecture Mode: Disable morphing and deformations
+          renderer.params.morphOn = 0;
+          renderer.params.twist = 0;
+          renderer.params.fold = 0;
+
+          // Architecture-optimized rendering (apply once)
+          if (!renderer.params.aoIntensity || renderer.params.aoIntensity < 1.0) {
+            renderer.params.aoIntensity = 1.5;
+            renderer.params.reflectivity = 0.15;
+            renderer.params.shadowSoft = 2.0;
+            renderer.params.specPow = 16.0;
+            renderer.params.maxSteps = 150;
+            renderer.params.epsilon = 0.0001;
+          }
+
+          // Update renderer tower parameters immediately
+          // Map enums to shader integer values
+          const shapeMap: Record<string, number> = {
+            'circle': 0, 'square': 1, 'triangle': 2, 'pentagon': 3,
+            'hexagon': 4, 'octagon': 5, 'star': 6, 'cross': 7,
+            'l-shape': 8, 't-shape': 9, 'h-shape': 10
+          };
+          const taperingMap: Record<string, number> = {
+            'none': 0, 'linear': 1, 'exponential': 2, 's-curve': 3, 'setback': 4
+          };
+          const twistingMap: Record<string, number> = {
+            'none': 0, 'uniform': 1, 'accelerating': 2, 'sine': 3
+          };
+
+          const facadeMap: Record<string, number> = {
+            'grid': 0, 'curtain-wall': 1, 'panels': 2
+          };
+
+          const updatedParams = {
+            baseRadius: towerParams.baseRadius,
+            topRadius: towerParams.topRadius,
+            height: towerParams.height,
+            floorCount: towerParams.floorCount,
+            floorHeight: towerParams.floorHeight,
+            twistAngle: towerParams.twistAngle * Math.PI / 180,
+            shapeType: shapeMap[towerParams.floorShape] ?? 1,  // Default to square
+            taperingType: taperingMap[towerParams.taperingMode] ?? 1,  // Default to linear
+            twistingType: twistingMap[towerParams.twistingMode] ?? 0,  // Default to none
+            balconyDepth: towerParams.balconyDepth ?? 0.0,
+            balconyRatio: towerParams.balconyRatio ?? 0.0,
+            windowSize: towerParams.windowSize ?? 0.5,
+            facadeType: facadeMap[towerParams.facadeType] ?? 0,  // Default to grid
+            // Additional parameters
+            shapeComplexity: towerParams.shapeComplexity ?? 16,
+            cornerRadius: towerParams.cornerRadius ?? 0.1,
+            twistLevels: towerParams.twistLevels ?? 10,
+            floorVariation: towerParams.floorVariation ?? 0,
+            asymmetry: towerParams.asymmetry ?? 0,
+            facadeGridX: towerParams.facadeGridX ?? 0.2,
+            facadeGridZ: towerParams.facadeGridZ ?? 0.2,
+            panelDepth: towerParams.panelDepth ?? 0.05,
+            taperingAmount: towerParams.taperingAmount ?? 0.3
+          };
+
+          (renderer as any).towerParams = updatedParams;
+          console.log('🔧 Tower params updated:', {
+            baseRadius: updatedParams.baseRadius,
+            height: updatedParams.height,
+            shape: `${towerParams.floorShape} -> ${updatedParams.shapeType}`,
+            tapering: `${towerParams.taperingMode} -> ${updatedParams.taperingType}`,
+            twisting: `${towerParams.twistingMode} -> ${updatedParams.twistingType}`
+          });
+
+          // Update formula display with current parameters
+          updateFormula(9);
+
+          // Update building statistics
+          updateBuildingStats();
+        };
+
+        // Building Statistics Display (updated in real-time)
+        const statsDisplay = {
+          totalArea: '0 m²',
+          avgFloorArea: '0 m²',
+          volume: '0 m³',
+          floorAreaRatio: '0',
+        };
+
+        const updateBuildingStats = () => {
+          import('../generators/parametric-tower').then(({ calculateBuildingStats }) => {
+            const stats = calculateBuildingStats(towerParams);
+            statsDisplay.totalArea = `${stats.grossFloorArea.toFixed(1)} m²`;
+            statsDisplay.avgFloorArea = `${stats.averageFloorArea.toFixed(1)} m²`;
+            statsDisplay.volume = `${stats.buildingVolume.toFixed(1)} m³`;
+            statsDisplay.floorAreaRatio = `${stats.floorAreaRatio.toFixed(2)}`;
+
+            // Update controllers display
+            if (statsFolder) {
+              statsFolder.controllersRecursive().forEach((c: any) => c.updateDisplay());
+            }
+          });
+        };
+
+        // Statistics Folder
+        const statsFolder = archFolder.addFolder('📊 Building Statistics');
+        statsFolder.add(statsDisplay, 'totalArea').name('延床面積 (GFA)').listen().disable();
+        statsFolder.add(statsDisplay, 'avgFloorArea').name('平均階面積').listen().disable();
+        statsFolder.add(statsDisplay, 'volume').name('建物容積').listen().disable();
+        statsFolder.add(statsDisplay, 'floorAreaRatio').name('容積率 (FAR)').listen().disable();
+        statsFolder.open();
+
+        // Add Advanced Facade Design controls with update callback
+        addFacadeDesignControls(archFolder, updateTowerRealtime);
+
+        // Basic Dimensions
+        const dimFolder = archFolder.addFolder('📏 Dimensions');
+
+        // 数値入力用のラッパーオブジェクト
+        const dimInputs = {
+          baseRadiusInput: towerParams.baseRadius.toFixed(2),
+          topRadiusInput: towerParams.topRadius.toFixed(2),
+          heightInput: towerParams.height.toFixed(1),
+          floorCountInput: towerParams.floorCount.toString(),
+          floorHeightInput: towerParams.floorHeight.toFixed(3),
+        };
+
+        // Base Radius (数値入力 + スライダー)
+        dimFolder.add(dimInputs, 'baseRadiusInput').name('基準階半径 (m)').onChange((v: string) => {
+          const num = parseFloat(v);
+          if (!isNaN(num) && num >= 0.3 && num <= 2.0) {
+            towerParams.baseRadius = num;
+            updateTowerRealtime();
+          }
+        });
+        dimFolder.add(towerParams, 'baseRadius', 0.3, 2.0, 0.05).name('▸ Radius Slider').onChange((v: number) => {
+          dimInputs.baseRadiusInput = v.toFixed(2);
+          updateTowerRealtime();
+        });
+
+        // Top Radius
+        dimFolder.add(dimInputs, 'topRadiusInput').name('頂部半径 (m)').onChange((v: string) => {
+          const num = parseFloat(v);
+          if (!isNaN(num) && num >= 0.2 && num <= 2.0) {
+            towerParams.topRadius = num;
+            updateTowerRealtime();
+          }
+        });
+        dimFolder.add(towerParams, 'topRadius', 0.2, 2.0, 0.05).name('▸ Top Slider').onChange((v: number) => {
+          dimInputs.topRadiusInput = v.toFixed(2);
+          updateTowerRealtime();
+        });
+
+        // Height
+        dimFolder.add(dimInputs, 'heightInput').name('建物高さ (m)').onChange((v: string) => {
+          const num = parseFloat(v);
+          if (!isNaN(num) && num >= 2.0 && num <= 15.0) {
+            towerParams.height = num;
+            updateTowerRealtime();
+          }
+        });
+        dimFolder.add(towerParams, 'height', 2.0, 15.0, 0.5).name('▸ Height Slider').onChange((v: number) => {
+          dimInputs.heightInput = v.toFixed(1);
+          updateTowerRealtime();
+        });
+
+        // Floor Count
+        dimFolder.add(dimInputs, 'floorCountInput').name('階数').onChange((v: string) => {
+          const num = parseInt(v);
+          if (!isNaN(num) && num >= 10 && num <= 100) {
+            towerParams.floorCount = num;
+            towerParams.floorHeight = towerParams.height / num; // 自動計算
+            dimInputs.floorHeightInput = towerParams.floorHeight.toFixed(3);
+            updateTowerRealtime();
+          }
+        });
+        dimFolder.add(towerParams, 'floorCount', 10, 100, 1).name('▸ Floors Slider').onChange((v: number) => {
+          dimInputs.floorCountInput = v.toString();
+          towerParams.floorHeight = towerParams.height / v; // 自動計算
+          dimInputs.floorHeightInput = towerParams.floorHeight.toFixed(3);
+          updateTowerRealtime();
+        });
+
+        // Floor Height (階高)
+        dimFolder.add(dimInputs, 'floorHeightInput').name('階高 (m)').onChange((v: string) => {
+          const num = parseFloat(v);
+          if (!isNaN(num) && num >= 0.05 && num <= 0.3) {
+            towerParams.floorHeight = num;
+            towerParams.floorCount = Math.round(towerParams.height / num); // 自動計算
+            dimInputs.floorCountInput = towerParams.floorCount.toString();
+            updateTowerRealtime();
+          }
+        });
+        dimFolder.add(towerParams, 'floorHeight', 0.05, 0.3, 0.005).name('▸ Floor H Slider').onChange((v: number) => {
+          dimInputs.floorHeightInput = v.toFixed(3);
+          towerParams.floorCount = Math.round(towerParams.height / v); // 自動計算
+          dimInputs.floorCountInput = towerParams.floorCount.toString();
+          updateTowerRealtime();
+        });
+
+        // Floor Shape
+        const shapeFolder = archFolder.addFolder('🔷 Floor Shape');
+        const shapeOptions = {
+          'Circle': FloorShape.CIRCLE,
+          'Square': FloorShape.SQUARE,
+          'Triangle': FloorShape.TRIANGLE,
+          'Pentagon': FloorShape.PENTAGON,
+          'Hexagon': FloorShape.HEXAGON,
+          'Octagon': FloorShape.OCTAGON,
+          'Star': FloorShape.STAR,
+          'Cross': FloorShape.CROSS,
+          'L-Shape': FloorShape.L_SHAPE,
+          'T-Shape': FloorShape.T_SHAPE,
+          'H-Shape': FloorShape.H_SHAPE
+        };
+        shapeFolder.add({ value: towerParams.floorShape }, 'value', shapeOptions).name('Shape').onChange((v: string) => {
+          towerParams.floorShape = v as any;
+          updateTowerRealtime();
+        });
+        shapeFolder.add(towerParams, 'shapeComplexity', 3, 32, 1).name('Complexity').onChange(updateTowerRealtime);
+        shapeFolder.add(towerParams, 'cornerRadius', 0, 1, 0.05).name('Corner Radius').onChange(updateTowerRealtime);
+
+        // Tapering
+        const taperingFolder = archFolder.addFolder('📐 Tapering');
+        const taperingOptions = {
+          'None': TaperingMode.NONE,
+          'Linear': TaperingMode.LINEAR,
+          'Exponential': TaperingMode.EXPONENTIAL,
+          'S-Curve': TaperingMode.S_CURVE,
+          'Setback': TaperingMode.SETBACK
+        };
+        taperingFolder.add({ value: towerParams.taperingMode }, 'value', taperingOptions).name('Mode').onChange((v: string) => {
+          towerParams.taperingMode = v as any;
+          updateTowerRealtime();
+        });
+        taperingFolder.add(towerParams, 'taperingAmount', 0, 1, 0.05).name('Amount').onChange(updateTowerRealtime);
+        taperingFolder.add(towerParams, 'topRadius', 0.2, 2.0, 0.05).name('Top Radius').onChange(updateTowerRealtime);
+
+        // Twisting
+        const twistingFolder = archFolder.addFolder('🌀 Twisting');
+        const twistingOptions = {
+          'None': TwistingMode.NONE,
+          'Uniform': TwistingMode.UNIFORM,
+          'Accelerating': TwistingMode.ACCELERATING,
+          'Sine': TwistingMode.SINE
+        };
+        twistingFolder.add({ value: towerParams.twistingMode }, 'value', twistingOptions).name('Mode').onChange((v: string) => {
+          towerParams.twistingMode = v as any;
+          updateTowerRealtime();
+        });
+        twistingFolder.add(towerParams, 'twistAngle', 0, 720, 10).name('Twist Angle (°)').onChange(updateTowerRealtime);
+        twistingFolder.add(towerParams, 'twistLevels', 5, 50, 1).name('Levels').onChange(updateTowerRealtime);
+
+        // Variations
+        const varFolder = archFolder.addFolder('🎲 Variations');
+        varFolder.add(towerParams, 'floorVariation', 0, 0.5, 0.05).name('Floor Variation').onChange(updateTowerRealtime);
+        varFolder.add(towerParams, 'asymmetry', 0, 1, 0.05).name('Asymmetry').onChange(updateTowerRealtime);
+
+        // Facade
+        const facadeFolder = archFolder.addFolder('🏢 Facade');
+        const facadeTypeOptions = {
+          'Grid (Office)': 'grid',
+          'Curtain Wall (Modern)': 'curtain-wall',
+          'Panels (Concrete)': 'panels'
+        };
+        facadeFolder.add({ value: towerParams.facadeType }, 'value', facadeTypeOptions).name('Type').onChange((v: string) => {
+          towerParams.facadeType = v as any;
+          updateTowerRealtime();
+        });
+        facadeFolder.add(towerParams, 'windowSize', 0, 1.0, 0.05).name('Window Size').onChange(updateTowerRealtime);
+        facadeFolder.add(towerParams, 'balconyRatio', 0, 1.0, 0.05).name('Balcony Ratio').onChange(updateTowerRealtime);
+        facadeFolder.add(towerParams, 'balconyDepth', 0, 0.2, 0.01).name('Balcony Depth').onChange(updateTowerRealtime);
+        facadeFolder.add(towerParams, 'panelDepth', 0, 0.1, 0.01).name('Panel Detail').onChange(updateTowerRealtime);
+
+        // Helper function to update UI and camera
+        const applyPresetWithCamera = (height: number) => {
+          const renderer = (window as any).renderer;
+          if (renderer) {
+            // Switch to Tower mode (mode 9)
+            renderer.params.mode = 9;
+
+            // Optimize rendering quality for architectural visualization
+            // Higher precision and more steps reduce flickering and noise
+            renderer.params.epsilon = 0.0005;  // Higher precision (default: 0.001)
+            renderer.params.maxSteps = 192;    // More raymarching steps (default: 128)
+
+            // Update tower parameters
+            updateTowerRealtime();
+
+            // Update UI controllers
+            [dimFolder, shapeFolder, taperingFolder, twistingFolder, varFolder, facadeFolder].forEach(folder => {
+              folder.controllersRecursive().forEach((c: any) => c.updateDisplay());
+            });
+
+            // Set optimal camera
+            renderer.orbitDistance = height * 0.8;
+            renderer.orbitPitch = 0.3;
+            renderer.orbitYaw = 0.5;
+            if (renderer.updateOrbitCamera) {
+              renderer.updateOrbitCamera();
+            }
+
+            console.log(`✅ Tower preset applied: mode=${renderer.params.mode}, height=${height}, epsilon=${renderer.params.epsilon}, maxSteps=${renderer.params.maxSteps}`);
+          }
+        };
+
+        // Building Type Presets
+        const presetsFolder = archFolder.addFolder('🏛️ Building Presets');
+        const presets = {
+          'Residential Tower': () => {
+            towerParams.baseRadius = 0.8;
+            towerParams.topRadius = 0.8;
+            towerParams.height = 5.0;
+            towerParams.floorCount = 30;
+            towerParams.floorHeight = 0.167;  // Larger floors for stability
+            towerParams.floorShape = FloorShape.SQUARE;
+            towerParams.shapeComplexity = 4;   // Low complexity for stability
+            towerParams.cornerRadius = 0.05;   // Slight rounding
+            towerParams.taperingMode = TaperingMode.NONE;
+            towerParams.taperingAmount = 0.0;
+            towerParams.twistingMode = TwistingMode.NONE;
+            towerParams.twistAngle = 0;
+            towerParams.twistLevels = 10;
+            towerParams.floorVariation = 0.0;  // NO variation for clean look
+            towerParams.asymmetry = 0.0;       // Perfect symmetry
+            towerParams.facadeGridX = 0.3;
+            towerParams.facadeGridZ = 0.3;
+            towerParams.facadeType = 'grid';
+            towerParams.panelDepth = 0.02;     // Subtle panel depth
+            towerParams.balconyRatio = 0.4;    // Moderate balconies
+            towerParams.balconyDepth = 0.08;   // Smaller depth for stability
+            towerParams.windowSize = 0.7;
+            applyPresetWithCamera(5.0);
+          },
+          'Office Tower': () => {
+            towerParams.baseRadius = 1.0;
+            towerParams.topRadius = 0.8;
+            towerParams.height = 6.0;
+            towerParams.floorCount = 50;
+            towerParams.floorHeight = 0.12;
+            towerParams.floorShape = FloorShape.OCTAGON;
+            towerParams.taperingMode = TaperingMode.LINEAR;
+            towerParams.twistingMode = TwistingMode.UNIFORM;
+            towerParams.twistAngle = 45;
+            towerParams.facadeType = 'curtain-wall';  // カーテンウォール!
+            towerParams.balconyRatio = 0.0;  // オフィスビルはバルコニーなし
+            towerParams.balconyDepth = 0.0;
+            towerParams.windowSize = 0.8;
+            applyPresetWithCamera(6.0);
+          },
+          'Mixed-Use Tower': () => {
+            towerParams.baseRadius = 1.2;
+            towerParams.topRadius = 0.7;
+            towerParams.height = 7.0;
+            towerParams.floorCount = 60;
+            towerParams.floorHeight = 0.117;
+            towerParams.floorShape = FloorShape.HEXAGON;
+            towerParams.taperingMode = TaperingMode.S_CURVE;
+            towerParams.twistingMode = TwistingMode.SINE;
+            towerParams.twistAngle = 90;
+            towerParams.facadeType = 'curtain-wall';  // モダンなカーテンウォール
+            towerParams.balconyRatio = 0.3;  // 下層はレジデンス向けにバルコニー
+            towerParams.balconyDepth = 0.1;
+            towerParams.windowSize = 0.7;
+            applyPresetWithCamera(7.0);
+          },
+          'Iconic Landmark': () => {
+            towerParams.baseRadius = 1.3;
+            towerParams.topRadius = 0.4;     // 0.3 → 0.4 for stability
+            towerParams.height = 8.0;        // 9.0 → 8.0 reduce height
+            towerParams.floorCount = 60;     // 80 → 60 fewer floors for stability
+            towerParams.floorHeight = 0.133; // Larger floors
+            towerParams.floorShape = FloorShape.HEXAGON; // STAR → HEXAGON (simpler)
+            towerParams.shapeComplexity = 6; // Moderate complexity
+            towerParams.cornerRadius = 0.1;  // Smooth corners
+            towerParams.taperingMode = TaperingMode.EXPONENTIAL;
+            towerParams.taperingAmount = 0.7; // Moderate tapering
+            towerParams.twistingMode = TwistingMode.LINEAR; // ACCELERATING → LINEAR (smoother)
+            towerParams.twistAngle = 120;    // 180 → 120 degrees (less extreme)
+            towerParams.twistLevels = 30;    // Smooth twist
+            towerParams.floorVariation = 0.0; // No variation
+            towerParams.asymmetry = 0.0;     // Perfect symmetry
+            towerParams.facadeGridX = 0.2;
+            towerParams.facadeGridZ = 0.2;
+            towerParams.facadeType = 'curtain-wall';  // Smooth glass facade
+            towerParams.panelDepth = 0.01;   // Minimal depth for curtain wall
+            towerParams.balconyRatio = 0.0;  // NO balconies for clean landmark
+            towerParams.balconyDepth = 0.0;
+            towerParams.windowSize = 0.9;
+            applyPresetWithCamera(8.0);
+          },
+          'Modern Skyscraper': () => {
+            towerParams.baseRadius = 1.1;
+            towerParams.topRadius = 0.9;
+            towerParams.height = 8.0;
+            towerParams.floorCount = 70;
+            towerParams.floorHeight = 0.114;
+            towerParams.floorShape = FloorShape.CROSS;
+            towerParams.taperingMode = TaperingMode.SETBACK;
+            towerParams.twistingMode = TwistingMode.UNIFORM;
+            towerParams.twistAngle = 30;
+            towerParams.facadeType = 'panels';  // パネル型
+            towerParams.balconyRatio = 0.2;
+            towerParams.balconyDepth = 0.08;
+            towerParams.windowSize = 0.5;
+            applyPresetWithCamera(8.0);
+          }
+        };
+
+        Object.entries(presets).forEach(([name, fn]) => {
+          presetsFolder.add({ preset: fn }, 'preset').name(name);
+        });
+
+        // Generate button
+        const generateBtn = {
+          generate: () => {
+            console.log('🏗️ Generating parametric tower...');
+            const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+            if (!renderer) {
+              console.error('Renderer not available');
+              return;
+            }
+
+            import('../generators/parametric-tower').then(({ generateParametricTower }) => {
+              const tower = generateParametricTower(towerParams);
+              console.log('Tower generated:', tower);
+
+              // Switch to Architecture mode if not already
+              if (modeManager.getCurrentMode() !== AppMode.ARCHITECTURE) {
+                modeManager.switchToMode(AppMode.ARCHITECTURE);
+              }
+
+              // Switch renderer to Tower mode (mode 9)
+              renderer.params.mode = 9;
+
+              // Set optimal camera position for tower viewing
+              // Position camera to view full tower height
+              const towerHeight = towerParams.height || 150;
+              const optimalDistance = towerHeight * 0.8; // 80% of tower height for good view
+              (renderer as any).orbitDistance = optimalDistance;
+              (renderer as any).orbitPitch = 0.3; // Slight upward angle
+              (renderer as any).orbitYaw = 0.5; // 45-degree angle
+              (renderer as any).updateOrbitCamera();
+
+              // Pass tower parameters to renderer for GLSL
+              // For now, use simple parameters that can be used in shader
+              if ((renderer as any).towerParams === undefined) {
+                (renderer as any).towerParams = {};
+              }
+
+              (renderer as any).towerParams = {
+                baseRadius: towerParams.baseRadius,
+                topRadius: towerParams.topRadius,
+                height: towerParams.height,
+                floorCount: towerParams.floorCount,
+                floorHeight: towerParams.floorHeight,
+                twistAngle: towerParams.twistAngle * Math.PI / 180,
+                shapeType: Object.values({
+                  circle: 0, square: 1, triangle: 2, pentagon: 3,
+                  hexagon: 4, octagon: 5, star: 6, cross: 7,
+                  'l-shape': 8, 't-shape': 9, 'h-shape': 10
+                })[Object.keys({
+                  circle: 0, square: 1, triangle: 2, pentagon: 3,
+                  hexagon: 4, octagon: 5, star: 6, cross: 7,
+                  'l-shape': 8, 't-shape': 9, 'h-shape': 10
+                }).indexOf(towerParams.floorShape)] || 0,
+                taperingType: Object.values({
+                  none: 0, linear: 1, exponential: 2, 's-curve': 3, setback: 4
+                })[Object.keys({
+                  none: 0, linear: 1, exponential: 2, 's-curve': 3, setback: 4
+                }).indexOf(towerParams.taperingMode)] || 1,
+                twistingType: Object.values({
+                  none: 0, uniform: 1, accelerating: 2, sine: 3
+                })[Object.keys({
+                  none: 0, uniform: 1, accelerating: 2, sine: 3
+                }).indexOf(towerParams.twistingMode)] || 0
+              };
+
+              console.log('✅ Tower parameters sent to renderer:', (renderer as any).towerParams);
+
+              // Show notification
+              const notification = document.createElement('div');
+              notification.textContent = `🏗️ Tower Generated: ${towerParams.floorShape}, ${towerParams.floorCount} floors`;
+              notification.style.cssText = `
+                position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+                background: rgba(0, 255, 204, 0.9); color: #000; padding: 12px 24px;
+                border-radius: 8px; font-weight: 600; z-index: 10000;
+                animation: slideDown 0.3s ease-out;
+              `;
+              document.body.appendChild(notification);
+              setTimeout(() => {
+                notification.style.animation = 'slideUp 0.3s ease-out';
+                setTimeout(() => notification.remove(), 300);
+              }, 2000);
+            });
+          }
+        };
+        archFolder.add(generateBtn, 'generate').name('🔨 Generate Tower');
+
+        archFolder.open();
+
+        // Apply default tower immediately
+        setTimeout(() => {
+          updateTowerRealtime();
+          console.log('✅ Default tower parameters applied');
+        }, 100);
+      });
+    } else {
+      // Folder already exists, make sure tower mode is active
+      const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+      if (renderer && renderer.params.mode !== 9) {
+        renderer.params.mode = 9;
+        console.log('✅ Re-activated Tower mode (9)');
+      }
+    }
+
+  } else {
+    // Fractal Mode: Show fractal parameters
+    console.log('🌀 Switching to Fractal Mode GUI');
+
+    // Disable architecture camera mode
+    const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+    if (renderer && (renderer as any).setArchitectureMode) {
+      (renderer as any).setArchitectureMode(false);
+    }
+
+    // Hide architecture folders
+    folders.forEach((folder: any) => {
+      if (folder._title && folder._title.includes('Parametric Tower')) {
+        folder.hide();
+      }
+    });
+
+    // Show fractal-specific folders
+    const fractalFolderNames = [
+      'Fractal Parameters',
+      'Deformations',
+      'Flower of Life',
+      'Fibonacci Shell',
+      'Mandelbox',
+      'Metatron Cube',
+      'Gyroid Cathedral',
+      'Typhoon',
+      'Quaternion Julia',
+      'Cosmic Bloom',
+      'Shape Presets'
+    ];
+
+    folders.forEach((folder: any) => {
+      if (folder._title) {
+        // Show fractal-specific folders
+        const shouldShow = fractalFolderNames.some(name => folder._title.includes(name));
+        if (shouldShow) {
+          folder.show();
+        }
+      }
+    });
+  }
+}
+
+/**
+ * Setup keyboard shortcuts for real-time palette switching
+ */
+function setupKeyboardShortcuts(): void {
+  // Get total number of palettes
+  const totalPalettes = COLOR_DESIGN_SYSTEM.reduce((sum, cat) => sum + cat.palettes.length, 0);
+
+  document.addEventListener('keydown', (e) => {
+    const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+    if (!renderer) return;
+
+    // Disable auto color cycle when manually changing
+    const disableAutoColor = () => {
+      const r = (window as typeof window & { renderer?: { autoColorCycle: boolean } }).renderer;
+      if (r && r.autoColorCycle) {
+        r.autoColorCycle = false;
+        const controller = (window as any).autoColorController;
+        if (controller) {
+          controller.setValue(false);
+        }
+      }
+    };
+
+    // Arrow Left/Right: Previous/Next palette
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      disableAutoColor();
+
+      const direction = e.key === 'ArrowLeft' ? -1 : 1;
+      let newMode = renderer.params.colorMode + direction;
+
+      // Wrap around
+      if (newMode < 0) newMode = totalPalettes - 1;
+      if (newMode >= totalPalettes) newMode = 0;
+
+      renderer.params.colorMode = newMode;
+
+      // Show notification
+      let paletteName = '';
+      let currentIndex = 0;
+      for (const category of COLOR_DESIGN_SYSTEM) {
+        for (const palette of category.palettes) {
+          if (currentIndex === newMode) {
+            paletteName = `${category.icon} ${palette.name}`;
+            break;
+          }
+          currentIndex++;
+        }
+        if (paletteName) break;
+      }
+
+      showNotification(`🎨 ${paletteName}`, 1000);
+    }
+
+    // Number keys 1-9,0: Quick palette selection
+    if (e.key >= '0' && e.key <= '9' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      disableAutoColor();
+
+      const num = e.key === '0' ? 9 : parseInt(e.key) - 1;
+      if (num < totalPalettes) {
+        renderer.params.colorMode = num;
+
+        // Get palette name
+        let paletteName = '';
+        let currentIndex = 0;
+        for (const category of COLOR_DESIGN_SYSTEM) {
+          for (const palette of category.palettes) {
+            if (currentIndex === num) {
+              paletteName = `${category.icon} ${palette.name}`;
+              break;
+            }
+            currentIndex++;
+          }
+          if (paletteName) break;
+        }
+
+        showNotification(`🎨 ${paletteName}`, 1000);
+      }
+    }
+
+    // 'R' key: Random palette
+    if (e.key === 'r' || e.key === 'R') {
+      if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        disableAutoColor();
+
+        const randomMode = Math.floor(Math.random() * totalPalettes);
+        renderer.params.colorMode = randomMode;
+
+        // Get palette name
+        let paletteName = '';
+        let currentIndex = 0;
+        for (const category of COLOR_DESIGN_SYSTEM) {
+          for (const palette of category.palettes) {
+            if (currentIndex === randomMode) {
+              paletteName = `${category.icon} ${palette.name}`;
+              break;
+            }
+            currentIndex++;
+          }
+          if (paletteName) break;
+        }
+
+        showNotification(`🎲 Random: ${paletteName}`, 1000);
+      }
+    }
+
+    // '?' key: Toggle help panel
+    if ((e.key === '?' || e.key === '/') && e.shiftKey) {
+      e.preventDefault();
+      const helpPanel = document.getElementById('help-panel');
+      if (helpPanel) {
+        helpPanel.classList.toggle('visible');
+        showNotification(helpPanel.classList.contains('visible') ? 'ℹ️ Help Opened' : 'ℹ️ Help Closed', 800);
+      }
+    }
+  });
+
+  // Show help on startup
+  setTimeout(() => {
+    showNotification('⌨️ Keyboard: ←→ Switch Colors | 1-9 Quick Select | R Random', 3000);
+  }, 2000);
+}
+
+/**
+ * Show temporary notification overlay
+ */
+function showNotification(message: string, duration: number): void {
+  // Remove existing notification
+  const existing = document.getElementById('keyboard-notification');
+  if (existing) {
+    existing.remove();
+  }
+
+  const notification = document.createElement('div');
+  notification.id = 'keyboard-notification';
+  notification.textContent = message;
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: #00ffcc;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 14px;
+    z-index: 10000;
+    pointer-events: none;
+    border: 1px solid #00ffcc;
+    box-shadow: 0 0 20px rgba(0, 255, 204, 0.3);
+    animation: slideIn 0.3s ease-out;
+  `;
+
+  // Add animation
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.style.transition = 'opacity 0.3s';
+    notification.style.opacity = '0';
+    setTimeout(() => {
+      notification.remove();
+    }, 300);
+  }, duration);
 }
 
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initControls);
+  document.addEventListener('DOMContentLoaded', () => {
+    initControls();
+    setupKeyboardShortcuts();
+  });
 } else {
   initControls();
+  setupKeyboardShortcuts();
 }
 
 export { initControls };
