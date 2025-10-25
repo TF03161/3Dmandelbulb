@@ -122,15 +122,15 @@ function meshToSpeckleMesh(mesh: Mesh, name: string): SpeckleMesh {
 function lineSegmentToSpeckleLine(segment: LineSegment, name: string): SpeckleLine {
   const { start, end } = segment;
 
-  const dx = end[0] - start[0];
-  const dy = end[1] - start[1];
-  const dz = end[2] - start[2];
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const dz = end.z - start.z;
   const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
   return {
     speckle_type: 'Objects.Geometry.Line',
-    start: { x: start[0], y: start[1], z: start[2] },
-    end: { x: end[0], y: end[1], z: end[2] },
+    start: { x: start.x, y: start.y, z: start.z },
+    end: { x: end.x, y: end.y, z: end.z },
     length,
     domain: { start: 0, end: 1 },
     name,
@@ -173,7 +173,7 @@ function architecturalModelToSpeckle(model: ArchitecturalModel, metadata: any = 
   if (model.core && model.core.length > 0) {
     const coreVertices: number[] = [];
     for (const point of model.core) {
-      coreVertices.push(point[0], point[1], point[2]);
+      coreVertices.push(point.x, point.y, point.z);
     }
 
     root['@core'] = {

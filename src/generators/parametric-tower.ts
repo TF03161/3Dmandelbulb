@@ -8,7 +8,7 @@
  * - Facade patterns (grid, panels, balconies)
  */
 
-import type { Vec3 } from '../utils/vec3';
+type Vec3 = [number, number, number];
 
 export enum FloorShape {
   CIRCLE = 'circle',

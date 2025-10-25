@@ -5,8 +5,9 @@
  * for real-time rendering and integration with existing pipeline
  */
 
-import type { Vec3 } from '../utils/vec3';
 import type { TowerGeometry, TowerFloor } from './parametric-tower';
+
+type Vec3 = [number, number, number];
 
 /**
  * Convert tower geometry to SDF function

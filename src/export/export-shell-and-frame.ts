@@ -103,7 +103,7 @@ export function exportArchitecturalGLTF(
   delete gltf.binaryBuffer;
 
   // Convert binary data to base64
-  const base64 = arrayBufferToBase64(binaryData.buffer);
+  const base64 = arrayBufferToBase64(binaryData.buffer as ArrayBuffer);
 
   // Embed as data URI
   gltf.buffers[0].uri = `data:application/octet-stream;base64,${base64}`;

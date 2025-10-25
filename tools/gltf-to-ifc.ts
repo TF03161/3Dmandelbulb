@@ -89,7 +89,7 @@ async function convertGLTFToIFC(
   const metadata = gltf.scenes[0]?.extras || {};
 
   // Generate IFC content
-  const ifcContent = generateIFC(gltf, metadata, options);
+  const ifcContent = generateIFC(gltf, metadata, options, outputPath);
 
   // Write IFC file
   fs.writeFileSync(outputPath, ifcContent, 'utf-8');
@@ -101,7 +101,7 @@ async function convertGLTFToIFC(
 /**
  * Generate IFC 4.0 SPF content
  */
-function generateIFC(gltf: GLTF, metadata: any, options: ConversionOptions): string {
+function generateIFC(gltf: GLTF, metadata: any, options: ConversionOptions, outputPath: string): string {
   const lines: string[] = [];
   let id = 1;
 

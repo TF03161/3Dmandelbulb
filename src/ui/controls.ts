@@ -546,11 +546,10 @@ function setupControlButtons(renderer: RendererWithParams): void {
           // Mandelbox
           const { sdfMandelbox } = await import('../export/sdf/mandelbox');
           sdfFunc = (p) => sdfMandelbox(p, {
-            maxIterations: r.params.mbIter || 15,
-            scale: r.params.mbScale || 2.0,
-            minRadius: r.params.mbMinRadius || 0.5,
-            fixedRadius: r.params.mbFixedRadius || 1.0,
-            time: 0
+            mbIter: r.params.mbIter || 15,
+            mbScale: r.params.mbScale || 2.0,
+            mbMinRadius: r.params.mbMinRadius || 0.5,
+            mbFixedRadius: r.params.mbFixedRadius || 1.0
           });
           bbox = {
             min: { x: -3.0, y: -3.0, z: -3.0 },
@@ -560,10 +559,9 @@ function setupControlButtons(renderer: RendererWithParams): void {
           // Gyroid
           const { sdfGyroid } = await import('../export/sdf/gyroid');
           sdfFunc = (p) => sdfGyroid(p, {
-            level: r.params.gyroLevel || 0.0,
-            scale: r.params.gyroScale || 1.0,
-            modulation: r.params.gyroMod || 0.0,
-            time: 0
+            gyroLevel: r.params.gyroLevel || 0.0,
+            gyroScale: r.params.gyroScale || 1.0,
+            gyroMod: r.params.gyroMod || 0.0
           });
           bbox = {
             min: { x: -5.0, y: -5.0, z: -5.0 },
@@ -1855,36 +1853,45 @@ function setupGUI(renderer: RendererWithParams): void {
       document.body.appendChild(overlay);
 
       try {
+        // Get renderer
+        const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+        if (!r) {
+          alert('Renderer not ready. Please wait a moment and try again.');
+          document.body.removeChild(overlay);
+          return;
+        }
+
         // Determine which SDF to use based on mode
-        let sdfFunc: (p: Vec3) => number;
+        let sdfFunc: (p: any) => number;
         let modelName = 'Fractal';
 
         if (r.params.mode === 0) {
           // Mandelbulb
           const { sdfMandelbulb } = await import('../export/sdf/mandelbulb');
           sdfFunc = (p) => sdfMandelbulb(p, {
-            power: r.params.powerBase + r.params.powerAmp,
-            iterations: r.params.maxIterations,
-            bailout: 4.0
+            maxIterations: r.params.maxIterations,
+            powerBase: r.params.powerBase,
+            powerAmp: r.params.powerAmp,
+            time: 0
           });
           modelName = 'Mandelbulb';
         } else if (r.params.mode === 3) {
           // Mandelbox
           const { sdfMandelbox } = await import('../export/sdf/mandelbox');
           sdfFunc = (p) => sdfMandelbox(p, {
-            scale: r.params.mbScale,
-            minRadius: r.params.mbMinRadius,
-            fixedRadius: r.params.mbFixedRadius,
-            iterations: r.params.mbIter
+            mbScale: r.params.mbScale,
+            mbMinRadius: r.params.mbMinRadius,
+            mbFixedRadius: r.params.mbFixedRadius,
+            mbIter: r.params.mbIter
           });
           modelName = 'Mandelbox';
         } else if (r.params.mode === 5) {
           // Gyroid
           const { sdfGyroid } = await import('../export/sdf/gyroid');
           sdfFunc = (p) => sdfGyroid(p, {
-            scale: r.params.gyroScale,
-            level: r.params.gyroLevel,
-            mod: r.params.gyroMod
+            gyroScale: r.params.gyroScale,
+            gyroLevel: r.params.gyroLevel,
+            gyroMod: r.params.gyroMod
           });
           modelName = 'Gyroid';
         } else {
@@ -1896,17 +1903,12 @@ function setupGUI(renderer: RendererWithParams): void {
         // Build architectural model
         const { buildArchitecturalModel } = await import('../pipelines/build-architectural-model');
         const bbox = {
-          min: [-4, -4, -4] as Vec3,
-          max: [4, 4, 4] as Vec3
+          min: { x: -4, y: -4, z: -4 },
+          max: { x: 4, y: 4, z: 4 }
         };
 
         const archModel = buildArchitecturalModel(sdfFunc, bbox, {
-          resolution: 192,
-          extractShell: true,
-          extractFrame: true,
-          extractFloors: true,
-          extractCore: true,
-          extractPanels: true
+          resolution: 192
         });
 
         progressFill.style.width = '30%';
@@ -2597,10 +2599,10 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
               // Position camera to view full tower height
               const towerHeight = towerParams.height || 150;
               const optimalDistance = towerHeight * 0.8; // 80% of tower height for good view
-              renderer.orbitDistance = optimalDistance;
-              renderer.orbitPitch = 0.3; // Slight upward angle
-              renderer.orbitYaw = 0.5; // 45-degree angle
-              renderer.updateOrbitCamera();
+              (renderer as any).orbitDistance = optimalDistance;
+              (renderer as any).orbitPitch = 0.3; // Slight upward angle
+              (renderer as any).orbitYaw = 0.5; // 45-degree angle
+              (renderer as any).updateOrbitCamera();
 
               // Pass tower parameters to renderer for GLSL
               // For now, use simple parameters that can be used in shader
