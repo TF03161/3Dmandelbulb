@@ -108,6 +108,8 @@ function setupControlButtons(renderer: RendererWithParams): void {
   const btnScreenshot = document.getElementById('btnScreenshot');
   const btnRecordVideo = document.getElementById('btnRecordVideo');
   const btnExportGLB = document.getElementById('btnExportGLB');
+  const helpToggle = document.getElementById('help-toggle');
+  const helpPanel = document.getElementById('help-panel');
 
   if (btnAutoColor) {
     btnAutoColor.addEventListener('click', () => {
@@ -643,6 +645,30 @@ function setupControlButtons(renderer: RendererWithParams): void {
       } finally {
         btnExportArchitecture.textContent = originalText;
         btnExportArchitecture.removeAttribute('disabled');
+      }
+    });
+  }
+
+  // Help Panel toggle
+  if (helpToggle && helpPanel) {
+    helpToggle.addEventListener('click', () => {
+      helpPanel.classList.toggle('visible');
+      console.log('ℹ️ Help panel toggled');
+    });
+
+    // Close help panel when clicking outside
+    document.addEventListener('click', (e) => {
+      if (helpPanel.classList.contains('visible') &&
+          !helpPanel.contains(e.target as Node) &&
+          e.target !== helpToggle) {
+        helpPanel.classList.remove('visible');
+      }
+    });
+
+    // Close help panel with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && helpPanel.classList.contains('visible')) {
+        helpPanel.classList.remove('visible');
       }
     });
   }
@@ -2765,20 +2791,29 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
             applyPresetWithCamera(7.0);
           },
           'Iconic Landmark': () => {
-            towerParams.baseRadius = 1.4;
-            towerParams.topRadius = 0.3;
-            towerParams.height = 9.0;
-            towerParams.floorCount = 80;
-            towerParams.floorHeight = 0.113;
-            towerParams.floorShape = FloorShape.STAR;
+            towerParams.baseRadius = 1.3;
+            towerParams.topRadius = 0.4;     // 0.3 → 0.4 for stability
+            towerParams.height = 8.0;        // 9.0 → 8.0 reduce height
+            towerParams.floorCount = 60;     // 80 → 60 fewer floors for stability
+            towerParams.floorHeight = 0.133; // Larger floors
+            towerParams.floorShape = FloorShape.HEXAGON; // STAR → HEXAGON (simpler)
+            towerParams.shapeComplexity = 6; // Moderate complexity
+            towerParams.cornerRadius = 0.1;  // Smooth corners
             towerParams.taperingMode = TaperingMode.EXPONENTIAL;
-            towerParams.twistingMode = TwistingMode.ACCELERATING;
-            towerParams.twistAngle = 180;
-            towerParams.facadeType = 'curtain-wall';  // 象徴的なガラス張り
-            towerParams.balconyRatio = 0.15;  // 特徴的なバルコニー
-            towerParams.balconyDepth = 0.15;
+            towerParams.taperingAmount = 0.7; // Moderate tapering
+            towerParams.twistingMode = TwistingMode.LINEAR; // ACCELERATING → LINEAR (smoother)
+            towerParams.twistAngle = 120;    // 180 → 120 degrees (less extreme)
+            towerParams.twistLevels = 30;    // Smooth twist
+            towerParams.floorVariation = 0.0; // No variation
+            towerParams.asymmetry = 0.0;     // Perfect symmetry
+            towerParams.facadeGridX = 0.2;
+            towerParams.facadeGridZ = 0.2;
+            towerParams.facadeType = 'curtain-wall';  // Smooth glass facade
+            towerParams.panelDepth = 0.01;   // Minimal depth for curtain wall
+            towerParams.balconyRatio = 0.0;  // NO balconies for clean landmark
+            towerParams.balconyDepth = 0.0;
             towerParams.windowSize = 0.9;
-            applyPresetWithCamera(9.0);
+            applyPresetWithCamera(8.0);
           },
           'Modern Skyscraper': () => {
             towerParams.baseRadius = 1.1;
@@ -3054,6 +3089,16 @@ function setupKeyboardShortcuts(): void {
         }
 
         showNotification(`🎲 Random: ${paletteName}`, 1000);
+      }
+    }
+
+    // '?' key: Toggle help panel
+    if ((e.key === '?' || e.key === '/') && e.shiftKey) {
+      e.preventDefault();
+      const helpPanel = document.getElementById('help-panel');
+      if (helpPanel) {
+        helpPanel.classList.toggle('visible');
+        showNotification(helpPanel.classList.contains('visible') ? 'ℹ️ Help Opened' : 'ℹ️ Help Closed', 800);
       }
     }
   });
