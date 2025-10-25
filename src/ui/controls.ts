@@ -2336,9 +2336,9 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
       renderer.params.shadowSoft = 2.0;       // Soft shadows for realism
       renderer.params.specPow = 16.0;         // Moderate specular highlights
 
-      // Better lighting for architecture
-      renderer.params.maxSteps = 150;         // Good quality without being too slow
-      renderer.params.epsilon = 0.0001;       // Fine detail
+      // Better lighting for architecture - optimized to reduce flickering
+      renderer.params.maxSteps = 192;         // Higher steps for smooth surfaces
+      renderer.params.epsilon = 0.0005;       // Balanced precision (not too small, not too large)
 
       // Enable architecture-specific camera system
       // Use actual tower height from params if available
@@ -2679,6 +2679,11 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
             // Switch to Tower mode (mode 9)
             renderer.params.mode = 9;
 
+            // Optimize rendering quality for architectural visualization
+            // Higher precision and more steps reduce flickering and noise
+            renderer.params.epsilon = 0.0005;  // Higher precision (default: 0.001)
+            renderer.params.maxSteps = 192;    // More raymarching steps (default: 128)
+
             // Update tower parameters
             updateTowerRealtime();
 
@@ -2695,7 +2700,7 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
               renderer.updateOrbitCamera();
             }
 
-            console.log(`✅ Tower preset applied: mode=${renderer.params.mode}, height=${height}`);
+            console.log(`✅ Tower preset applied: mode=${renderer.params.mode}, height=${height}, epsilon=${renderer.params.epsilon}, maxSteps=${renderer.params.maxSteps}`);
           }
         };
 
@@ -2703,20 +2708,29 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
         const presetsFolder = archFolder.addFolder('🏛️ Building Presets');
         const presets = {
           'Residential Tower': () => {
-            towerParams.baseRadius = 0.7;
-            towerParams.topRadius = 0.7;
-            towerParams.height = 4.0;
-            towerParams.floorCount = 35;
-            towerParams.floorHeight = 0.114;
+            towerParams.baseRadius = 0.8;
+            towerParams.topRadius = 0.8;
+            towerParams.height = 5.0;
+            towerParams.floorCount = 30;
+            towerParams.floorHeight = 0.167;  // Larger floors for stability
             towerParams.floorShape = FloorShape.SQUARE;
+            towerParams.shapeComplexity = 4;   // Low complexity for stability
+            towerParams.cornerRadius = 0.05;   // Slight rounding
             towerParams.taperingMode = TaperingMode.NONE;
+            towerParams.taperingAmount = 0.0;
             towerParams.twistingMode = TwistingMode.NONE;
             towerParams.twistAngle = 0;
+            towerParams.twistLevels = 10;
+            towerParams.floorVariation = 0.0;  // NO variation for clean look
+            towerParams.asymmetry = 0.0;       // Perfect symmetry
+            towerParams.facadeGridX = 0.3;
+            towerParams.facadeGridZ = 0.3;
             towerParams.facadeType = 'grid';
-            towerParams.balconyRatio = 0.6;  // 60% - バルコニー多め!
-            towerParams.balconyDepth = 0.12;
-            towerParams.windowSize = 0.6;
-            applyPresetWithCamera(4.0);
+            towerParams.panelDepth = 0.02;     // Subtle panel depth
+            towerParams.balconyRatio = 0.4;    // Moderate balconies
+            towerParams.balconyDepth = 0.08;   // Smaller depth for stability
+            towerParams.windowSize = 0.7;
+            applyPresetWithCamera(5.0);
           },
           'Office Tower': () => {
             towerParams.baseRadius = 1.0;

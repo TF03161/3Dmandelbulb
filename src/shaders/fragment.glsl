@@ -1058,73 +1058,59 @@ float parametricTowerDE(vec3 p, out vec4 trap) {
     shapeDist = dist2D - radius;
   }
 
-  // ファサードディテール
+  // ファサードディテール - OPTIMIZED FOR STABILITY
   float facadeDetail = 0.0;
   float floorLevel = y / max(uTowerFloorHeight, 1e-3);
   float floorFract = fract(floorLevel);
 
+  // Smooth facade only - reduce noise and flickering
   if (uTowerFacadeType == 0) {
-    // グリッド型ファサード (従来型オフィスビル)
-    // Use facadeGridX and facadeGridZ parameters
-    float gridFreqX = 8.0 / max(uTowerFacadeGridX, 0.01); // Higher frequency for smaller grid
-    float gridFreqZ = 4.0 / max(uTowerFacadeGridZ, 0.01);
-    float windowGridX = sin(angle * gridFreqX) * uTowerPanelDepth;
-    float windowGridY = sin(floorLevel * gridFreqZ) * uTowerPanelDepth;
-    facadeDetail = windowGridX + windowGridY;
-
-    // 各階の床スラブ
-    float floorSlab = smoothstep(0.92, 0.98, floorFract) * uTowerPanelDepth * 1.5;
-    facadeDetail += floorSlab;
+    // グリッド型ファサード - SIMPLIFIED
+    // Only subtle floor divisions, no noisy grid
+    float floorSlab = smoothstep(0.90, 0.96, floorFract) * uTowerPanelDepth * 0.8;
+    facadeDetail = floorSlab;
 
   } else if (uTowerFacadeType == 1) {
-    // カーテンウォール (ガラス張りモダンビル)
-    float glassGrid = sin(angle * 32.0) * sin(floorLevel * 4.0) * 0.015;
-    facadeDetail = glassGrid;
-
-    // 縦のマリオン(柱)
-    float mullions = smoothstep(0.95, 1.0, fract(angle * 8.0 / TAU)) * 0.03;
-    facadeDetail += mullions;
+    // カーテンウォール - VERY SMOOTH
+    // Minimal detail for glass curtain wall
+    float floorSlab = smoothstep(0.92, 0.98, floorFract) * 0.01;
+    facadeDetail = floorSlab;
 
   } else {
-    // パネル型ファサード (プレキャストコンクリート)
-    float panelX = step(0.5, fract(angle * 12.0 / TAU)) * 0.04;
-    float panelY = step(0.5, floorFract) * 0.04;
-    facadeDetail = panelX + panelY - 0.02;
+    // パネル型ファサード - SMOOTH PANELS
+    float floorSlab = smoothstep(0.90, 0.96, floorFract) * uTowerPanelDepth * 0.6;
+    facadeDetail = floorSlab;
   }
 
   shapeDist -= facadeDetail;
 
-  // バルコニー (レジデンス用)
-  if (uTowerBalconyDepth > 0.001 && uTowerBalconyRatio > 0.001) {
+  // バルコニー (レジデンス用) - SIMPLIFIED FOR STABILITY
+  if (uTowerBalconyDepth > 0.01 && uTowerBalconyRatio > 0.01) {
     float floorIndex = floor(floorLevel);
     float balconyHash = fract(sin(floorIndex * 78.233) * 43758.5453);
 
-    // バルコニーがある階かどうか
-    if (balconyHash < uTowerBalconyRatio && floorFract > 0.85) {
-      float balconyDepth = uTowerBalconyDepth;
-      float balconyHeight = uTowerFloorHeight * 0.15;
+    // バルコニーがある階かどうか - simplified condition
+    if (balconyHash < uTowerBalconyRatio && floorFract > 0.88 && floorFract < 0.98) {
+      float balconyDepth = uTowerBalconyDepth * 0.8; // Reduced depth for stability
 
-      // バルコニーの張り出し (外側に出る)
+      // シンプルなバルコニー (張り出しのみ、手すりなし)
+      // Simple extrusion without complex railing
       float balconyDist = dist2D - (radius + balconyDepth);
-      float balconyY = abs(y - (floorIndex + 0.92) * uTowerFloorHeight) - balconyHeight;
-      float balconyBox = max(balconyDist, balconyY);
+      float balconyBlend = smoothstep(0.88, 0.92, floorFract) * smoothstep(0.98, 0.94, floorFract);
 
-      // 手すり
-      float railingDist = abs(dist2D - (radius + balconyDepth - 0.02)) - 0.01;
-      float railingY = abs(y - (floorIndex + 1.0) * uTowerFloorHeight) - balconyHeight * 0.5;
-      float railing = max(railingDist, railingY);
-
-      shapeDist = min(shapeDist, min(balconyBox, railing));
+      // Blend balcony smoothly to avoid sharp edges
+      shapeDist = mix(shapeDist, min(shapeDist, balconyDist), balconyBlend * 0.8);
     }
   }
 
-  // 大きな構造分割 (5階ごと)
-  float structuralDivision = smoothstep(0.95, 1.0, fract(floorLevel / 5.0)) * 0.12;
+  // 大きな構造分割 (5階ごと) - REDUCED
+  float structuralDivision = smoothstep(0.96, 1.0, fract(floorLevel / 5.0)) * 0.06;
   shapeDist += structuralDivision;
 
-  // コーナーディテール
-  if (uTowerShapeType > 0) {
-    float cornerDetail = smoothstep(0.92, 1.0, dist2D / max(radius, 1e-3)) * 0.04;
+  // コーナーディテール - DISABLED for simple shapes to reduce noise
+  // Complex shapes only
+  if (uTowerShapeType > 2) {
+    float cornerDetail = smoothstep(0.94, 1.0, dist2D / max(radius, 1e-3)) * 0.02;
     shapeDist += cornerDetail;
   }
 

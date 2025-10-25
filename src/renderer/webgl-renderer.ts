@@ -7,6 +7,8 @@ import { vec3 } from '../utils/vec3';
 import vertexShaderSource from '../shaders/vertex.glsl?raw';
 import fragmentShaderSource from '../shaders/fragment.glsl?raw';
 import { PostProcessor, PostProcessParams } from './post-processor';
+import { modeManager } from '../modes/mode-manager';
+import { AppMode } from '../modes/mode-types';
 
 interface UniformLocations {
   uResolution: WebGLUniformLocation | null;
@@ -722,7 +724,8 @@ class WebGLRenderer {
 
     // Auto Color - exactly same as original HTML
     // Uses Neon Rainbow mode (-1) with animated seed values
-    if (this.autoColorCycle) {
+    // ONLY in Fractal Mode (not Architecture Mode)
+    if (this.autoColorCycle && modeManager.getCurrentMode() === AppMode.FRACTAL) {
       params.seed[0] = 0.5 + 0.5 * Math.sin(time * 0.27);
       params.seed[1] = 0.5 + 0.5 * Math.sin(time * 0.31 + 2.0);
       params.seed[2] = 0.5 + 0.5 * Math.sin(time * 0.23 + 4.0);

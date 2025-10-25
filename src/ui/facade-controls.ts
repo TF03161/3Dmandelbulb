@@ -247,8 +247,13 @@ export function addFacadeDesignControls(parentFolder: GUI, onUpdate?: () => void
       // Update all UI controllers to reflect new values
       advFacadeFolder.controllersRecursive().forEach((c: any) => c.updateDisplay());
 
-      // Trigger update to renderer
+      // Trigger update to renderer immediately
       triggerUpdate();
+
+      // Force additional update after a short delay to ensure rendering
+      setTimeout(() => {
+        triggerUpdate();
+      }, 100);
 
       console.log(`✅ Applied preset: ${preset.name}`, preset.params);
     };
