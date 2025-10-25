@@ -7,6 +7,7 @@ import GUI from 'lil-gui';
 import { modeManager } from '../modes/mode-manager';
 import { AppMode, MODE_CONFIGS } from '../modes/mode-types';
 import { addFacadeDesignControls } from './facade-controls';
+import { presetManager, type Preset } from './preset-manager';
 
 interface RendererWithParams {
   params: {
@@ -1408,87 +1409,186 @@ function setupGUI(renderer: RendererWithParams): void {
   // Add shape presets to GUI
   setupShapePresetsInGUI(gui, renderer);
 
-  // User Preset Management
+  // User Preset Management (Enhanced with PresetManager)
   const userPresetFolder = gui.addFolder('💾 User Presets');
+
+  // Preset selection dropdown
+  const presetList: { [key: string]: string } = {};
+  const updatePresetList = () => {
+    // Clear existing
+    Object.keys(presetList).forEach(k => delete presetList[k]);
+
+    // Add all presets
+    const allPresets = presetManager.getAllPresets();
+    allPresets.forEach(preset => {
+      presetList[preset.name] = preset.id;
+    });
+  };
+
+  updatePresetList();
+
+  const presetState = {
+    selectedPreset: '',
+    presetCategory: 'All'
+  };
+
+  // Category filter
+  const categories = ['All', 'Mandelbulb', 'Mandelbox', 'Gyroid', 'Custom'];
+  userPresetFolder.add(presetState, 'presetCategory', categories).name('Category').onChange(updatePresetList);
+
   const presetActions = {
     'Save Current': () => {
       const presetName = prompt('Enter preset name:');
       if (!presetName) return;
 
+      const description = prompt('Enter description (optional):') || '';
+      const category = prompt('Enter category (Mandelbulb, Mandelbox, etc.):') || 'Custom';
+
       try {
-        // Save all parameters to localStorage
-        const presetData = {
-          params: JSON.parse(JSON.stringify(renderer.params)),
-          seed: Array.from(renderer.params.seed),
-          quatC: Array.from(renderer.params.quatC)
-        };
-        localStorage.setItem(`preset_${presetName}`, JSON.stringify(presetData));
-        alert(`Preset "${presetName}" saved successfully!`);
+        const preset = presetManager.savePreset({
+          name: presetName,
+          description,
+          category,
+          params: {
+            mode: renderer.params.mode,
+            maxIterations: renderer.params.maxIterations,
+            powerBase: renderer.params.powerBase,
+            powerAmp: renderer.params.powerAmp,
+            scale: renderer.params.scale,
+            epsilon: renderer.params.epsilon,
+            maxSteps: renderer.params.maxSteps,
+            aoIntensity: renderer.params.aoIntensity,
+            reflectivity: renderer.params.reflectivity,
+            palSpeed: renderer.params.palSpeed,
+            palSpread: renderer.params.palSpread,
+            juliaMix: renderer.params.juliaMix,
+            twist: renderer.params.twist,
+            morphOn: renderer.params.morphOn,
+            fold: renderer.params.fold,
+            boxSize: renderer.params.boxSize,
+            mbScale: renderer.params.mbScale,
+            mbMinRadius: renderer.params.mbMinRadius,
+            mbFixedRadius: renderer.params.mbFixedRadius,
+            mbIter: renderer.params.mbIter,
+            gyroLevel: renderer.params.gyroLevel,
+            gyroScale: renderer.params.gyroScale,
+            gyroMod: renderer.params.gyroMod,
+            colorMode: renderer.params.colorMode
+          }
+        });
+
+        updatePresetList();
+        alert(`✅ Preset "${preset.name}" saved successfully!`);
       } catch (error) {
-        alert('Failed to save preset. ' + (error instanceof Error ? error.message : ''));
+        alert('❌ Failed to save preset. ' + (error instanceof Error ? error.message : ''));
       }
     },
+
     'Load Preset': () => {
-      const presetName = prompt('Enter preset name to load:');
+      const allPresets = presetManager.getAllPresets();
+      if (allPresets.length === 0) {
+        alert('No presets available. Save one first!');
+        return;
+      }
+
+      const presetNames = allPresets.map(p => p.name).join('\n');
+      const presetName = prompt('Available presets:\n\n' + presetNames + '\n\nEnter name to load:');
       if (!presetName) return;
 
+      const preset = allPresets.find(p => p.name === presetName);
+      if (!preset) {
+        alert(`Preset "${presetName}" not found.`);
+        return;
+      }
+
       try {
-        const presetData = localStorage.getItem(`preset_${presetName}`);
-        if (!presetData) {
-          alert(`Preset "${presetName}" not found.`);
-          return;
-        }
+        // Apply preset parameters
+        Object.keys(preset.params).forEach(key => {
+          const value = preset.params[key as keyof typeof preset.params];
+          if (value !== undefined && key in renderer.params) {
+            (renderer.params as any)[key] = value;
+          }
+        });
 
-        const data = JSON.parse(presetData);
-        // Restore all parameters
-        Object.assign(renderer.params, data.params);
-        if (data.seed) {
-          data.seed.forEach((v: number, i: number) => renderer.params.seed[i] = v);
-        }
-        if (data.quatC) {
-          data.quatC.forEach((v: number, i: number) => renderer.params.quatC[i] = v);
-        }
-        alert(`Preset "${presetName}" loaded successfully!`);
-
-        // Update formula display
+        alert(`✅ Preset "${preset.name}" loaded!\n\n${preset.description}`);
         updateFormula(renderer.params.mode);
       } catch (error) {
-        alert('Failed to load preset. ' + (error instanceof Error ? error.message : ''));
+        alert('❌ Failed to load preset. ' + (error instanceof Error ? error.message : ''));
       }
     },
-    'List Presets': () => {
-      const presets: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('preset_')) {
-          presets.push(key.replace('preset_', ''));
-        }
+
+    'Browse Presets': () => {
+      const allPresets = presetManager.getAllPresets();
+      if (allPresets.length === 0) {
+        alert('No presets saved yet.');
+        return;
       }
 
-      if (presets.length === 0) {
-        alert('No saved presets found.');
-      } else {
-        alert('Saved presets:\n\n' + presets.join('\n'));
-      }
+      const presetInfo = allPresets.map(p =>
+        `📌 ${p.name}\n   Category: ${p.category}\n   ${p.description}\n   Created: ${new Date(p.createdAt).toLocaleDateString()}`
+      ).join('\n\n');
+
+      alert('Saved Presets:\n\n' + presetInfo);
     },
+
     'Delete Preset': () => {
-      const presetName = prompt('Enter preset name to delete:');
+      const allPresets = presetManager.getAllPresets();
+      const presetNames = allPresets.map(p => p.name).join('\n');
+      const presetName = prompt('Available presets:\n\n' + presetNames + '\n\nEnter name to delete:');
       if (!presetName) return;
 
-      const key = `preset_${presetName}`;
-      if (localStorage.getItem(key)) {
-        localStorage.removeItem(key);
-        alert(`Preset "${presetName}" deleted successfully!`);
-      } else {
+      const preset = allPresets.find(p => p.name === presetName);
+      if (!preset) {
         alert(`Preset "${presetName}" not found.`);
+        return;
       }
+
+      if (confirm(`Delete preset "${presetName}"?`)) {
+        presetManager.deletePreset(preset.id);
+        updatePresetList();
+        alert(`✅ Preset "${presetName}" deleted.`);
+      }
+    },
+
+    'Export All': () => {
+      const json = presetManager.exportPresets();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '3dmandelbulb-presets.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      alert('✅ Presets exported successfully!');
+    },
+
+    'Import Presets': () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/json';
+      input.onchange = async (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) return;
+
+        try {
+          const text = await file.text();
+          const count = presetManager.importPresets(text);
+          updatePresetList();
+          alert(`✅ Imported ${count} presets successfully!`);
+        } catch (error) {
+          alert('❌ Failed to import presets. ' + (error instanceof Error ? error.message : ''));
+        }
+      };
+      input.click();
     }
   };
 
   userPresetFolder.add(presetActions, 'Save Current');
   userPresetFolder.add(presetActions, 'Load Preset');
-  userPresetFolder.add(presetActions, 'List Presets');
+  userPresetFolder.add(presetActions, 'Browse Presets');
   userPresetFolder.add(presetActions, 'Delete Preset');
+  userPresetFolder.add(presetActions, 'Export All');
+  userPresetFolder.add(presetActions, 'Import Presets');
 
   // Initial formula display
   updateFormula(renderer.params.mode);
