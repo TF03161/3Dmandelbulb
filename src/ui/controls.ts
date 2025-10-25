@@ -8,6 +8,7 @@ import { modeManager } from '../modes/mode-manager';
 import { AppMode, MODE_CONFIGS } from '../modes/mode-types';
 import { addFacadeDesignControls } from './facade-controls';
 import { presetManager, type Preset } from './preset-manager';
+import { ScreenshotCapture } from '../utils/screenshot';
 
 interface RendererWithParams {
   params: {
@@ -140,6 +141,31 @@ function setupControlButtons(renderer: RendererWithParams): void {
         }
       }
     });
+  }
+
+  // Enhanced Screenshot System
+  if (btnScreenshot) {
+    const canvas = document.getElementById('gl') as HTMLCanvasElement;
+    if (canvas) {
+      const screenshotCapture = new ScreenshotCapture(canvas);
+
+      btnScreenshot.addEventListener('click', () => {
+        const r = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+        const modeNames = [
+          'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+          'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+        ];
+        const modeName = r ? modeNames[r.params.mode] || 'Fractal' : 'Fractal';
+
+        screenshotCapture.capture({
+          filename: `3dmandelbulb_${modeName}`,
+          format: 'png',
+          quality: 0.95,
+          scale: 1,
+          timestamp: true
+        });
+      });
+    }
   }
 
   if (btnScreenshot) {
@@ -1590,6 +1616,95 @@ function setupGUI(renderer: RendererWithParams): void {
   userPresetFolder.add(presetActions, 'Export All');
   userPresetFolder.add(presetActions, 'Import Presets');
 
+  // Screenshot folder with advanced options
+  const screenshotFolder = gui.addFolder('📸 Screenshot');
+  const screenshotOptions = {
+    format: 'png' as 'png' | 'jpg' | 'webp',
+    quality: 95,
+    scale: 1,
+    timestamp: true,
+    'Quick Screenshot': () => {
+      const canvas = document.getElementById('gl') as HTMLCanvasElement;
+      if (!canvas) {
+        alert('Canvas not found');
+        return;
+      }
+
+      const capture = new ScreenshotCapture(canvas);
+      const modeNames = [
+        'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+        'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+      ];
+      const modeName = modeNames[renderer.params.mode] || 'Fractal';
+
+      capture.capture({
+        filename: `3dmandelbulb_${modeName}`,
+        format: screenshotOptions.format,
+        quality: screenshotOptions.quality / 100,
+        scale: screenshotOptions.scale,
+        timestamp: screenshotOptions.timestamp
+      });
+    },
+    'High-Res (2x)': () => {
+      const canvas = document.getElementById('gl') as HTMLCanvasElement;
+      if (!canvas) return;
+
+      const capture = new ScreenshotCapture(canvas);
+      const modeNames = [
+        'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+        'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+      ];
+      const modeName = modeNames[renderer.params.mode] || 'Fractal';
+
+      capture.capture({
+        filename: `3dmandelbulb_${modeName}_2x`,
+        format: screenshotOptions.format,
+        quality: screenshotOptions.quality / 100,
+        scale: 2,
+        timestamp: screenshotOptions.timestamp
+      });
+    },
+    'Ultra-Res (4x)': () => {
+      const canvas = document.getElementById('gl') as HTMLCanvasElement;
+      if (!canvas) return;
+
+      const modeNames = [
+        'Mandelbulb', 'FoLD', 'Fibonacci', 'Mandelbox',
+        'Metatron', 'Gyroid', 'Typhoon', 'Quaternion', 'Cosmic'
+      ];
+      const modeName = modeNames[renderer.params.mode] || 'Fractal';
+
+      alert('⏳ Capturing 4x resolution... This may take a moment.');
+
+      setTimeout(() => {
+        const capture = new ScreenshotCapture(canvas);
+        capture.capture({
+          filename: `3dmandelbulb_${modeName}_4x`,
+          format: screenshotOptions.format,
+          quality: screenshotOptions.quality / 100,
+          scale: 4,
+          timestamp: screenshotOptions.timestamp
+        });
+      }, 100);
+    },
+    'Copy to Clipboard': async () => {
+      const canvas = document.getElementById('gl') as HTMLCanvasElement;
+      if (!canvas) return;
+
+      const capture = new ScreenshotCapture(canvas);
+      await capture.copyToClipboard();
+    }
+  };
+
+  screenshotFolder.add(screenshotOptions, 'format', ['png', 'jpg', 'webp']).name('Format');
+  screenshotFolder.add(screenshotOptions, 'quality', 1, 100, 1).name('Quality %');
+  screenshotFolder.add(screenshotOptions, 'scale', [1, 2, 4]).name('Resolution Scale');
+  screenshotFolder.add(screenshotOptions, 'timestamp').name('Add Timestamp');
+  screenshotFolder.add(screenshotOptions, 'Quick Screenshot');
+  screenshotFolder.add(screenshotOptions, 'High-Res (2x)');
+  screenshotFolder.add(screenshotOptions, 'Ultra-Res (4x)');
+  screenshotFolder.add(screenshotOptions, 'Copy to Clipboard');
+
   // Initial formula display
   updateFormula(renderer.params.mode);
 
@@ -2820,11 +2935,188 @@ function updateGUIPanelsForMode(mode: AppMode, gui: GUI): void {
   }
 }
 
+/**
+ * Setup keyboard shortcuts for real-time palette switching
+ */
+function setupKeyboardShortcuts(): void {
+  // Get total number of palettes
+  const totalPalettes = COLOR_DESIGN_SYSTEM.reduce((sum, cat) => sum + cat.palettes.length, 0);
+
+  document.addEventListener('keydown', (e) => {
+    const renderer = (window as typeof window & { renderer?: RendererWithParams }).renderer;
+    if (!renderer) return;
+
+    // Disable auto color cycle when manually changing
+    const disableAutoColor = () => {
+      const r = (window as typeof window & { renderer?: { autoColorCycle: boolean } }).renderer;
+      if (r && r.autoColorCycle) {
+        r.autoColorCycle = false;
+        const controller = (window as any).autoColorController;
+        if (controller) {
+          controller.setValue(false);
+        }
+      }
+    };
+
+    // Arrow Left/Right: Previous/Next palette
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      disableAutoColor();
+
+      const direction = e.key === 'ArrowLeft' ? -1 : 1;
+      let newMode = renderer.params.colorMode + direction;
+
+      // Wrap around
+      if (newMode < 0) newMode = totalPalettes - 1;
+      if (newMode >= totalPalettes) newMode = 0;
+
+      renderer.params.colorMode = newMode;
+
+      // Show notification
+      let paletteName = '';
+      let currentIndex = 0;
+      for (const category of COLOR_DESIGN_SYSTEM) {
+        for (const palette of category.palettes) {
+          if (currentIndex === newMode) {
+            paletteName = `${category.icon} ${palette.name}`;
+            break;
+          }
+          currentIndex++;
+        }
+        if (paletteName) break;
+      }
+
+      showNotification(`🎨 ${paletteName}`, 1000);
+    }
+
+    // Number keys 1-9,0: Quick palette selection
+    if (e.key >= '0' && e.key <= '9' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      disableAutoColor();
+
+      const num = e.key === '0' ? 9 : parseInt(e.key) - 1;
+      if (num < totalPalettes) {
+        renderer.params.colorMode = num;
+
+        // Get palette name
+        let paletteName = '';
+        let currentIndex = 0;
+        for (const category of COLOR_DESIGN_SYSTEM) {
+          for (const palette of category.palettes) {
+            if (currentIndex === num) {
+              paletteName = `${category.icon} ${palette.name}`;
+              break;
+            }
+            currentIndex++;
+          }
+          if (paletteName) break;
+        }
+
+        showNotification(`🎨 ${paletteName}`, 1000);
+      }
+    }
+
+    // 'R' key: Random palette
+    if (e.key === 'r' || e.key === 'R') {
+      if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        disableAutoColor();
+
+        const randomMode = Math.floor(Math.random() * totalPalettes);
+        renderer.params.colorMode = randomMode;
+
+        // Get palette name
+        let paletteName = '';
+        let currentIndex = 0;
+        for (const category of COLOR_DESIGN_SYSTEM) {
+          for (const palette of category.palettes) {
+            if (currentIndex === randomMode) {
+              paletteName = `${category.icon} ${palette.name}`;
+              break;
+            }
+            currentIndex++;
+          }
+          if (paletteName) break;
+        }
+
+        showNotification(`🎲 Random: ${paletteName}`, 1000);
+      }
+    }
+  });
+
+  // Show help on startup
+  setTimeout(() => {
+    showNotification('⌨️ Keyboard: ←→ Switch Colors | 1-9 Quick Select | R Random', 3000);
+  }, 2000);
+}
+
+/**
+ * Show temporary notification overlay
+ */
+function showNotification(message: string, duration: number): void {
+  // Remove existing notification
+  const existing = document.getElementById('keyboard-notification');
+  if (existing) {
+    existing.remove();
+  }
+
+  const notification = document.createElement('div');
+  notification.id = 'keyboard-notification';
+  notification.textContent = message;
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: #00ffcc;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 14px;
+    z-index: 10000;
+    pointer-events: none;
+    border: 1px solid #00ffcc;
+    box-shadow: 0 0 20px rgba(0, 255, 204, 0.3);
+    animation: slideIn 0.3s ease-out;
+  `;
+
+  // Add animation
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.style.transition = 'opacity 0.3s';
+    notification.style.opacity = '0';
+    setTimeout(() => {
+      notification.remove();
+    }, 300);
+  }, duration);
+}
+
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initControls);
+  document.addEventListener('DOMContentLoaded', () => {
+    initControls();
+    setupKeyboardShortcuts();
+  });
 } else {
   initControls();
+  setupKeyboardShortcuts();
 }
 
 export { initControls };
